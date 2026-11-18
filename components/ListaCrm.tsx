@@ -35,7 +35,7 @@ interface Prefs {
   visiveis: string[] | null;
 }
 
-const PADRAO: Prefs = { modo: 'manual', larguras: {}, ordem: [], grade: 'horizontais', visiveis: null };
+const PADRAO: Prefs = { modo: 'manual', larguras: {}, ordem: [], grade: 'ambas', visiveis: null };
 const MIN = 50;
 const W_IND = 30;
 const W_ACOES = 96; // w-24

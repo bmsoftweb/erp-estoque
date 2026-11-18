@@ -1,69 +1,20 @@
 import 'dotenv/config';
-import express, { Request, Response } from 'express';
-import fs from 'node:fs';
+import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { NextRequest } from './server/next-server';
-import { contextoRequisicao } from './server/next-headers';
+import { createApp } from './server/app.js';
 
 /**
- * Servidor: Express com as rotas /api (uma por arquivo app/**\/route.ts, pasta = caminho, [x] = :x)
- * e, por cima, o Vite (desenvolvimento) ou a pasta dist (produção) para o front-end.
+ * Servidor local: a API (server/app.ts) e, por cima, o Vite (desenvolvimento) ou a pasta dist (produção).
+ * Na Vercel a API roda como função (api/index.ts) e o front-end é estático: este arquivo não é usado lá.
  */
-const RAIZ = process.cwd();
-const METODOS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
-
-/** Todos os route.ts de uma pasta, com o caminho da URL que cada um atende */
-function listarRotas(pasta: string, prefixo = ''): { arquivo: string; caminho: string }[] {
-  const achados: { arquivo: string; caminho: string }[] = [];
-  for (const e of fs.readdirSync(pasta, { withFileTypes: true })) {
-    if (e.isDirectory()) {
-      const seg = /^\[(.+)\]$/.test(e.name) ? ':' + e.name.slice(1, -1) : e.name;
-      achados.push(...listarRotas(path.join(pasta, e.name), `${prefixo}/${seg}`));
-    } else if (e.name === 'route.ts') {
-      achados.push({ arquivo: path.join(pasta, e.name), caminho: prefixo || '/' });
-    }
-  }
-  return achados;
-}
-
-/** Segmentos fixos antes dos dinâmicos (/api/produtos/schema antes de /api/produtos/:id) */
-const chaveOrdem = (caminho: string) => caminho.split('/').map((s) => (s.startsWith(':') ? '1' : '0')).join('');
-
 async function main() {
-  const app = express();
+  const app = createApp();
   // Um servidor HTTP só: o HMR do Vite usa a mesma porta do app (a 24678 padrão colide com os outros projetos Vite abertos)
   const servidor = http.createServer(app);
-  app.use(express.json({ limit: '5mb' }));
-
-  const rotas = listarRotas(path.join(RAIZ, 'app')).sort((a, b) => chaveOrdem(a.caminho).localeCompare(chaveOrdem(b.caminho)) || a.caminho.localeCompare(b.caminho));
-  for (const r of rotas) {
-    const mod = await import(pathToFileURL(r.arquivo).href);
-    for (const m of METODOS) {
-      const handler = mod[m] ?? mod.default?.[m];
-      if (typeof handler !== 'function') continue;
-      app[m.toLowerCase() as 'get'](r.caminho, async (req: Request, res: Response) => {
-        try {
-          const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-          const nreq = new NextRequest(url, { body: req.body, headers: req.headers });
-          const out: globalThis.Response = await contextoRequisicao.run({ req, res }, () => handler(nreq, { params: Promise.resolve(req.params) }));
-          res.status(out.status);
-          out.headers.forEach((v, k) => k !== 'content-length' && res.setHeader(k, v));
-          res.send(Buffer.from(await out.arrayBuffer()));
-        } catch (err: any) {
-          console.error(`${m} ${req.originalUrl}:`, err);
-          if (!res.headersSent) res.status(500).json({ error: err.message || 'Erro interno do servidor' });
-        }
-      });
-    }
-  }
-
-  // API desconhecida: 404 em JSON em vez de cair no index.html
-  app.use('/api', (_req, res) => res.status(404).json({ error: 'Rota não encontrada' }));
 
   if (process.env.NODE_ENV === 'production') {
-    const dist = path.join(RAIZ, 'dist');
+    const dist = path.join(process.cwd(), 'dist');
     app.use(express.static(dist));
     app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
   } else {

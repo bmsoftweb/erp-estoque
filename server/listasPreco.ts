@@ -1,4 +1,4 @@
-import { CAMPOS_CRITERIO, type CampoCriterio, type ListaPreco } from '@/lib/precos';
+import { CAMPOS_CRITERIO, type CampoCriterio, type ListaPreco } from '../lib/precos.js';
 
 /** Leitura, validação e gravação das listas de preço (tabelas pre_* do extras/2026-11-09_listas_de_preco.sql) */
 
