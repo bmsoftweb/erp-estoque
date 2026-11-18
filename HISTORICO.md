@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.3 — 2026-11-18
+
+- Ícone do app (favicon e ícone do projeto na Vercel) igual ao card do Estoque no BM-Master: caixa branca em fundo verde (`public/favicon.svg`), como no erp-crm.
+
 ## 0.1.2 — 2026-11-18
 
 - API convertida para o padrão do erp-crm: as rotas no formato Next (`app/api/**/route.ts`) viraram routers Express por recurso em `server/*.ts`, montados em `server/app.ts` (`createApp()`); saem os adaptadores `next-server`/`next-headers`.
