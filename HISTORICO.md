@@ -2,6 +2,14 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.4 — 2026-11-19
+
+- Dicas (tooltips) no padrão BMsoft em todo o app: caixa escura com seta no lugar da dica nativa do navegador.
+- Nova tela Chassi (consulta de VIN).
+- Imagens do produto (Vercel Blob e busca na web).
+- Estoque por localização.
+- Lista e filtro ficam guardados.
+
 ## 0.1.3 — 2026-11-18
 
 - Ícone do app (favicon e ícone do projeto na Vercel) igual ao card do Estoque no BM-Master: caixa branca em fundo verde (`public/favicon.svg`), como no erp-crm.

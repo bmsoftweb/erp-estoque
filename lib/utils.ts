@@ -28,6 +28,36 @@ export function formatNumber(value: number | string | undefined | null, decimals
   }).format(num);
 }
 
+/** Número no padrão brasileiro com 2 a 4 casas (quantidades com 3 ou 4 casas não são cortadas): 50 → 50,00; 0.125 → 0,125 */
+export function formatNumero(value: number | string | undefined | null): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(num == null || isNaN(num) ? 0 : num);
+}
+
+/**
+ * Tipo de apresentação de uma coluna da grade que não tem tipo configurado ("texto"), pelo tipo no banco:
+ * decimal vira moeda (preço, custo, valor, total) ou número. O resto continua como veio.
+ */
+export function tipoPelaColuna(coluna: string, tipoBanco?: string): string {
+  if (!/^(decimal|numeric|float|double)/i.test(tipoBanco || '')) return 'texto';
+  return /preco|custo|valor|total/i.test(coluna) ? 'moeda' : 'numero';
+}
+
+/** Estado de tela guardado nesta aba do navegador: sobrevive a sair da tela e voltar (some ao fechar a aba) */
+export function lerSessao<T>(chave: string, padrao: T): T {
+  try {
+    const v = sessionStorage.getItem(chave);
+    return v ? JSON.parse(v) : padrao;
+  } catch {
+    return padrao;
+  }
+}
+export function gravarSessao(chave: string, valor: unknown) {
+  try {
+    sessionStorage.setItem(chave, JSON.stringify(valor));
+  } catch {}
+}
+
 export function parseBankingInput(value: string, decimals: number = 2): number {
   const cleanValue = value.replace(/\D/g, '');
   if (cleanValue === '') return 0;

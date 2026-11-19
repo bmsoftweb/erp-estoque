@@ -6,7 +6,7 @@ import { ListaCrm } from '@/components/ListaCrm';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AbasCrm } from '@/components/TelaHeader';
 import { FormCrm, Campo, INPUT_CLASS, TelaCheia, SecaoCrm, GradeCampos, ResumoRegistro } from '@/components/FormCrm';
-import { BotaoAcao, SeparadorAcoes } from '@/components/MenuAcoes';
+import { BotaoAcao, SeparadorAcoes, Vazio } from '@/components/MenuAcoes';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
   Plus, 
@@ -28,7 +28,7 @@ import {
   ChevronsDown
 } from 'lucide-react';
 import { getGridConfigs, saveGridConfigs, deleteGridConfigColumn, GridColumnConfig } from '@/lib/grid-config';
-import { formatCurrency, formatNumber, parseBankingInput } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatNumero, parseBankingInput, tipoPelaColuna } from '@/lib/utils';
 
 interface Produto {
   id: number;
@@ -256,7 +256,11 @@ export default function MovimentoPage() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [resizingCol]);
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | 'none' }>({ key: '', direction: 'none' });
+  // Vindo do "Movimento" de Produtos (?produto_id=), abre em ordem crescente (mais antigo em cima, como a ficha de
+  // estoque). Pelo ID, que desempata movimentos lançados no mesmo segundo
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | 'none' }>(() =>
+    new URLSearchParams(window.location.search).get('produto_id') ? { key: 'id', direction: 'asc' } : { key: '', direction: 'none' }
+  );
 
   const sortedMovimentacoes = useMemo(() => {
     if (sortConfig.direction === 'none' || !sortConfig.key) return movimentacoes;
@@ -317,10 +321,13 @@ export default function MovimentoPage() {
   const [produtoAtributosDetalhes, setProdutoAtributosDetalhes] = useState<any[]>([]);
   const [valoresSelecionadosAtributo, setValoresSelecionadosAtributo] = useState<{[key: number]: string}>({});
 
+  // Aberto pelo "Movimento" do menu de Produtos: /movimento?produto_id=12 já vem filtrado pelo produto
+  const produtoDaUrl = new URLSearchParams(window.location.search).get('produto_id') || '';
   const [filterData, setFilterData] = useState<Record<string, any>>({
     descricao: '',
     categoria_id: '',
     marca_id: '',
+    produto_id: produtoDaUrl,
   });
 
   const [formDataVariante, setFormDataVariante] = useState({
@@ -439,11 +446,11 @@ export default function MovimentoPage() {
     await loadMovimentacoes(isRefresh);
   };
 
-  const loadMovimentacoes = async (isRefresh = false) => {
+  const loadMovimentacoes = async (isRefresh = false, filtro = filterData) => {
     if (!isRefresh) setIsLoading(true);
     try {
       const queryParams = new URLSearchParams();
-      Object.entries(filterData).forEach(([key, value]) => {
+      Object.entries(filtro).forEach(([key, value]) => {
         if (value) {                
             queryParams.append(key, value);
         }
@@ -517,7 +524,7 @@ export default function MovimentoPage() {
         // Tudo em paralelo (antes cada chamada esperava a anterior terminar)
         const [userRes, movimentacoesRes, categoriasRes, unidadesRes, marcasRes, atributosRes, schemaRes, produtosRes, localizacoesRes, lotesRes, configData] = await Promise.all([
           fetchWithLog('/api/user', 'usuário'),
-          fetchWithLog('/api/movimento', 'movimentações'),
+          fetchWithLog(produtoDaUrl ? `/api/movimento?produto_id=${encodeURIComponent(produtoDaUrl)}` : '/api/movimento', 'movimentações'),
           fetchWithLog('/api/categorias', 'categorias'),
           fetchWithLog('/api/unidades', 'unidades'),
           fetchWithLog('/api/marcas', 'marcas'),
@@ -565,7 +572,7 @@ export default function MovimentoPage() {
         
         setFilterSchema(finalSchema);
 
-        const defaultColumns = ['id', 'tipo', 'lote_id', 'quantidade', 'custo_unitario', 'data_movimento', 'localizacao_orig_id', 'localizacao_dest_id'];
+        const defaultColumns = ['id', 'data_hora', 'tipo', 'produto_nome', 'lote_id', 'quantidade', 'saldo', 'custo_unitario', 'localizacao_orig_id', 'localizacao_dest_id'];
 
         if (gridProdConfigs.length > 0) {
           // Deduplicate configs
@@ -582,6 +589,10 @@ export default function MovimentoPage() {
             .sort((a: any, b: any) => (a.ordem || 0) - (b.ordem || 0))
             .map((c: any) => c.nome_da_coluna);
           
+          // Colunas novas (Produto, Saldo): quem salvou a grade antes delas as recebe ao lado da coluna de referência (se ocultar, fica oculta)
+          for (const [nova, depoisDe] of [['data_hora', 'id'], ['produto_nome', 'tipo'], ['saldo', 'quantidade']]) {
+            if (visibleCols.length > 0 && !configMap.has(nova)) visibleCols.splice(visibleCols.indexOf(depoisDe) + 1, 0, nova);
+          }
           if (visibleCols.length > 0) {
             setActiveGridColumns(visibleCols);
           } else {
@@ -868,7 +879,8 @@ export default function MovimentoPage() {
     }
 
     // Configurações baseadas no tipo de apresentação
-    const type = config?.tipo_apresentacao || 'texto';
+    // Sem tipo na grade, a coluna decimal sai no formato brasileiro pelo tipo do banco
+    const type = config?.tipo_apresentacao && config.tipo_apresentacao !== 'texto' ? config.tipo_apresentacao : tipoPelaColuna(colKey, filterSchema.find((f: any) => f.key === colKey)?.type);
     let displayValue = value;
     let align = 'text-left';
     let mono = '';
@@ -880,7 +892,7 @@ export default function MovimentoPage() {
       align = 'text-right';
       mono = 'font-mono';
     } else if (type === 'numero') {
-      displayValue = formatNumber(parseFloat(value) || 0, 2);
+      displayValue = formatNumero(value);
       align = 'text-right';
       mono = 'font-mono';
     } else if (type === 'inteiro') {
@@ -896,6 +908,11 @@ export default function MovimentoPage() {
           }
         } catch { /* keep as is */ }
       }
+      align = 'text-center';
+    } else if (colKey === 'data_hora') {
+      // Vem do servidor como "aaaa-mm-dd hh:mm:ss" (horário de Brasília); só troca a ordem, sem fuso
+      const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(value || '');
+      displayValue = m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : value;
       align = 'text-center';
     } else if (colKey === 'id' && !config?.tabela_display) {
       displayValue = formatNumber(p.id, 0);
@@ -1476,16 +1493,34 @@ export default function MovimentoPage() {
                 className="flex-1"
                 onNovo={() => openForm()}
                 rotuloNovo="Novo Movimento"
-                barraExtra={<button type="button" onClick={() => setActiveTab('filter')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-stone-300 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800 transition-colors cursor-pointer shrink-0 whitespace-nowrap">
+                barraExtra={<>
+                  {filterData.produto_id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const semProduto = { ...filterData, produto_id: '' };
+                        setFilterData(semProduto);
+                        setSortConfig({ key: '', direction: 'none' });
+                        router.replace('/movimento');
+                        loadMovimentacoes(false, semProduto);
+                      }}
+                      title="Tirar o filtro do produto"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900 transition-colors cursor-pointer min-w-0 max-w-xs"
+                    >
+                      <span className="truncate">Produto: {produtos.find((p) => String(p.id) === String(filterData.produto_id))?.nome || `#${filterData.produto_id}`}</span>
+                      <X className="w-3.5 h-3.5 shrink-0" />
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setActiveTab('filter')} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-stone-300 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800 transition-colors cursor-pointer shrink-0 whitespace-nowrap">
                     <Search className="w-3.5 h-3.5" />
                     <span>Filtrar</span>
-                  </button>}
+                  </button>
+                </>}
                 chave={(r: any) => r.id}
                 linhas={sortedMovimentacoes}
                 ordemExterna={{ key: sortConfig.key, dir: sortConfig.direction }}
                 onOrdenar={handleSort}
                 onEditar={openForm}
-                acoesEmMenu
                 extraMenu={[{ rotulo: 'Configurar colunas…', onClick: openGridConfig }]}
                 vazio="Nenhuma movimentação encontrada."
                 colunas={activeGridColumns.map((col) => {
@@ -1494,7 +1529,7 @@ export default function MovimentoPage() {
                     key: col,
                     label: getColLabel(col),
                     alinhar: info.align === 'text-right' ? ('numero' as const) : info.align === 'text-center' ? ('centro' as const) : ('texto' as const),
-                    largura: col === 'nome' ? 360 : undefined,
+                    largura: col === 'nome' || col === 'produto_nome' ? 360 : undefined,
                     render: (r: any) => {
                       const c = cellInfo(r, col);
                       return <span className={`${c.textColor} ${c.mono}`}>{c.content}</span>;
@@ -1514,14 +1549,16 @@ export default function MovimentoPage() {
                 }}
                 acoes={(r: any) => (
                   <>
-                    <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
-                    {(r.tipo_produto === 'variacao_simples' || r.tipo_produto === 'variacao_atributo') && (
+                    {/* Variantes e Composição nunca aparecem juntas: dividem a mesma posição */}
+                    {r.tipo_produto === 'variacao_simples' || r.tipo_produto === 'variacao_atributo' ? (
                       <BotaoAcao icone={Layers} titulo="Variantes" descricao="Abre as variantes do produto" onClick={() => openVariantes(r)} />
-                    )}
-                    {r.tipo_produto === 'composto' && (
+                    ) : r.tipo_produto === 'composto' ? (
                       <BotaoAcao icone={Package} titulo="Composição" descricao="Abre a composição do produto" onClick={() => openComposicao(r)} />
+                    ) : (
+                      <Vazio />
                     )}
                     <SeparadorAcoes />
+                    <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
                     <BotaoAcao icone={Trash2} titulo="Excluir" descricao="Apaga o registro (pede confirmação)" tom="perigo" onClick={() => handleDeleteProduto(r.id)} />
                   </>
                 )}
@@ -2381,7 +2418,7 @@ export default function MovimentoPage() {
                     <span className="text-sm font-medium text-elegant-text-bright">Descrição (Geral)</span>
                   </label>
 
-                  {filterSchema.filter(f => !['id', 'descricao', 'date_insert', 'date_update'].includes(f.key)).map(field => (
+                  {filterSchema.filter(f => !['id', 'descricao', 'date_insert', 'date_update', 'data_hora'].includes(f.key)).map(field => (
                     <label key={field.key} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${activeFilterFields.includes(field.key) ? 'bg-elegant-accent/10 border-elegant-accent shadow-sm' : 'bg-elegant-bg border-elegant-border hover:border-elegant-text-label/30'}`}>
                       <input 
                         type="checkbox" 

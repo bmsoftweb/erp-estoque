@@ -4,13 +4,15 @@ import { useRouter } from '@/lib/nav';
 import { ListaCrm } from '@/components/ListaCrm';
 import { DadosFiscaisProduto } from '@/components/DadosFiscaisProduto';
 import { EmbalagensProduto } from '@/components/EmbalagensProduto';
+import { EstoqueProduto } from '@/components/EstoqueProduto';
+import { ImagensProduto } from '@/components/ImagensProduto';
 import { ProdutosRelacionados } from '@/components/ProdutosRelacionados';
-import { Receipt, Boxes, Replace, ShoppingBasket } from 'lucide-react';
+import { Receipt, Boxes, Replace, ShoppingBasket, ArrowLeftRight, Warehouse } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AvisoErro } from '@/components/AvisoErro';
 import { AbasCrm } from '@/components/TelaHeader';
 import { FormCrm, Campo, INPUT_CLASS, TelaCheia, SecaoCrm, GradeCampos, ResumoRegistro } from '@/components/FormCrm';
-import { BotaoAcao, SeparadorAcoes } from '@/components/MenuAcoes';
+import { BotaoAcao, SeparadorAcoes, Vazio } from '@/components/MenuAcoes';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
   Plus, 
@@ -29,10 +31,11 @@ import {
   Maximize,
   ChevronUp,
   ChevronDown,
-  ChevronsDown
+  ChevronsDown,
+  ImageIcon
 } from 'lucide-react';
 import { getGridConfigs, saveGridConfigs, GridColumnConfig } from '@/lib/grid-config';
-import { formatCurrency, formatNumber, parseBankingInput } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatNumero, gravarSessao, lerSessao, parseBankingInput, tipoPelaColuna } from '@/lib/utils';
 
 interface Produto {
   id: number;
@@ -52,6 +55,7 @@ interface Produto {
   date_update: string;
   variantes_count?: number;
   atributos_vinculados?: string;
+  imagem_principal?: string | null;
 }
 
 interface ProdutoVariante {
@@ -92,7 +96,7 @@ export default function ProdutosPage() {
   const [isSavingGrid, setIsSavingGrid] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'grid' | 'edit' | 'variantes' | 'filter' | 'composicao' | 'fiscal' | 'embalagens' | 'similares' | 'sugestoes'>('grid');
+  const [activeTab, setActiveTab] = useState<'grid' | 'edit' | 'variantes' | 'filter' | 'composicao' | 'fiscal' | 'embalagens' | 'estoque' | 'imagens' | 'similares' | 'sugestoes'>('grid');
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; id: number | null; type: 'produto' | 'variante' | 'composicao' }>({ isOpen: false, id: null, type: 'produto' });
   const [isDeleting, setIsDeleting] = useState(false);
@@ -169,7 +173,8 @@ export default function ProdutosPage() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [resizingCol]);
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | 'none' }>({ key: '', direction: 'none' });
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | 'none' }>(() => lerSessao('produtos:ordem', { key: '', direction: 'none' }));
+  useEffect(() => gravarSessao('produtos:ordem', sortConfig), [sortConfig]);
 
   const sortedProdutos = useMemo(() => {
     if (sortConfig.direction === 'none' || !sortConfig.key) return produtos;
@@ -230,11 +235,12 @@ export default function ProdutosPage() {
   const [produtoAtributosDetalhes, setProdutoAtributosDetalhes] = useState<any[]>([]);
   const [valoresSelecionadosAtributo, setValoresSelecionadosAtributo] = useState<{[key: number]: string}>({});
 
-  const [filterData, setFilterData] = useState<Record<string, any>>({
+  // Filtro aplicado fica na aba do navegador: sair da tela e voltar mantém a mesma lista
+  const [filterData, setFilterData] = useState<Record<string, any>>(() => lerSessao('produtos:filtro', {
     descricao: '',
     categoria_id: '',
     marca_id: '',
-  });
+  }));
 
   const [formDataVariante, setFormDataVariante] = useState({
     sku_variante: '',
@@ -325,10 +331,8 @@ export default function ProdutosPage() {
     setDraggedColumn(null);
   };
 
-  const loadProdutos = async (isRefresh = false) => {
-    if (!isRefresh) setIsLoading(true);
-    try {
-      const queryParams = new URLSearchParams();
+  const queryFiltro = () => {
+    const queryParams = new URLSearchParams();
       Object.entries(filterData).forEach(([key, value]) => {
         if (value) {
           if (key === 'marca' || key === 'marca_id') {
@@ -340,8 +344,14 @@ export default function ProdutosPage() {
           }
         }
       });
+    return queryParams.toString();
+  };
 
-      const res = await fetch(`/api/produtos?${queryParams.toString()}`);
+  const loadProdutos = async (isRefresh = false) => {
+    if (!isRefresh) setIsLoading(true);
+    try {
+      gravarSessao('produtos:filtro', filterData);
+      const res = await fetch(`/api/produtos?${queryFiltro()}`);
       if (res.ok) {
         setProdutos(await res.json());
       }
@@ -393,7 +403,7 @@ export default function ProdutosPage() {
       try {
         const [userRes, produtosRes, categoriasRes, unidadesRes, marcasRes, atributosRes, configRes, schemaRes] = await Promise.all([
           fetch('/api/user'),
-          fetch('/api/produtos'),
+          fetch(`/api/produtos?${queryFiltro()}`),
           fetch('/api/categorias'),
           fetch('/api/unidades'),
           fetch('/api/marcas'),
@@ -467,7 +477,7 @@ export default function ProdutosPage() {
         });
         setFilterSchema(finalSchema);
 
-        const defaultColumns = ['id', 'sku', 'categoria_id', 'nome', 'tipo_produto', 'preco_custo', 'preco_venda', 'ativo'];
+        const defaultColumns = ['id', 'sku', 'categoria_id', 'nome', 'tipo_produto', 'preco_custo', 'preco_venda', 'estoque', 'ativo'];
 
         if (gridProdConfigs.length > 0) {
           // Deduplicate configs
@@ -483,7 +493,9 @@ export default function ProdutosPage() {
             .filter((c: any) => validColumnKeys.includes(c.nome_da_coluna))
             .sort((a: any, b: any) => (a.ordem || 0) - (b.ordem || 0))
             .map((c: any) => c.nome_da_coluna);
-          
+          // Coluna Estoque é nova: quem salvou a grade antes dela a recebe depois do Preço Venda (se ocultar, fica oculta)
+          if (visibleCols.length > 0 && !configMap.has('estoque')) visibleCols.splice(visibleCols.indexOf('preco_venda') + 1, 0, 'estoque');
+
           if (visibleCols.length > 0) {
             setActiveGridColumns(visibleCols);
           } else {
@@ -806,7 +818,8 @@ export default function ProdutosPage() {
     }
 
     // Configurações baseadas no tipo de apresentação
-    const type = config?.tipo_apresentacao || 'texto';
+    // Sem tipo na grade, a coluna decimal sai no formato brasileiro pelo tipo do banco
+    const type = config?.tipo_apresentacao && config.tipo_apresentacao !== 'texto' ? config.tipo_apresentacao : tipoPelaColuna(colKey, filterSchema.find((f: any) => f.key === colKey)?.type);
     let displayValue = value;
     let align = 'text-left';
     let mono = '';
@@ -818,7 +831,7 @@ export default function ProdutosPage() {
       align = 'text-right';
       mono = 'font-mono';
     } else if (type === 'numero') {
-      displayValue = formatNumber(parseFloat(value) || 0, 2);
+      displayValue = formatNumero(value);
       align = 'text-right';
       mono = 'font-mono';
     } else if (type === 'inteiro') {
@@ -1157,6 +1170,11 @@ export default function ProdutosPage() {
     setActiveTab('embalagens');
   };
 
+  const openImagens = (produto: Produto) => {
+    setSelectedProduto(produto);
+    setActiveTab('imagens');
+  };
+
   const openRelacionados = (produto: Produto, tipo: 'similares' | 'sugestoes') => {
     setSelectedProduto(produto);
     setActiveTab(tipo);
@@ -1487,7 +1505,7 @@ export default function ProdutosPage() {
           abas={
             activeTab === 'grid'
               ? []
-              : [{ key: activeTab, titulo: activeTab === 'edit' ? (editingProduto ? 'Editar Produto' : 'Novo Produto') : activeTab === 'variantes' ? 'Variantes' : activeTab === 'composicao' ? 'Composição' : activeTab === 'fiscal' ? 'Dados fiscais' : activeTab === 'embalagens' ? 'Embalagens' : activeTab === 'similares' ? 'Similares' : activeTab === 'sugestoes' ? 'Sugestões' : 'Filtrar', novo: activeTab === 'edit' && !editingProduto }]
+              : [{ key: activeTab, titulo: activeTab === 'edit' ? (editingProduto ? 'Editar Produto' : 'Novo Produto') : activeTab === 'variantes' ? 'Variantes' : activeTab === 'composicao' ? 'Composição' : activeTab === 'fiscal' ? 'Dados fiscais' : activeTab === 'embalagens' ? 'Embalagens' : activeTab === 'estoque' ? 'Estoque' :activeTab === 'imagens' ? 'Imagens' : activeTab === 'similares' ? 'Similares' : activeTab === 'sugestoes' ? 'Sugestões' : 'Filtrar', novo: activeTab === 'edit' && !editingProduto }]
           }
           ativa={activeTab === 'grid' ? null : activeTab}
           onAtivar={(k) => k === null && closeTab()}
@@ -1525,7 +1543,23 @@ export default function ProdutosPage() {
                 aberta={(r: Produto) => expandedRows.includes(r.id)}
                 onAlternar={(r: Produto) => toggleRow(r.id)}
                 vazio="Nenhum produto encontrado."
-                colunas={activeGridColumns.map((col) => {
+                colunas={[{
+                  key: 'imagem_principal',
+                  label: 'Imagem',
+                  alinhar: 'centro' as const,
+                  largura: 64,
+                  render: (r: Produto) => (
+                    <button
+                      type="button"
+                      title="Imagens do produto"
+                      onClick={() => openImagens(r)}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      className="inline-flex w-9 h-9 rounded border border-stone-300/60 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/80 overflow-hidden items-center justify-center align-middle cursor-pointer hover:border-blue-500 transition-colors"
+                    >
+                      {r.imagem_principal ? <img src={r.imagem_principal} alt="" loading="lazy" className="w-full h-full object-contain" /> : <ImageIcon className="w-4 h-4 text-stone-300 dark:text-stone-600" />}
+                    </button>
+                  ),
+                }, ...activeGridColumns.map((col) => {
                   const info = cellInfo({} as Produto, col);
                   return {
                     key: col,
@@ -1537,7 +1571,7 @@ export default function ProdutosPage() {
                       return <span className={`${c.textColor} ${c.mono}`}>{c.content}</span>;
                     },
                   };
-                })}
+                })]}
                 rodape={(col) => {
                   const config = gridConfigs.find((c) => c.nome_do_grid === 'grid_produtos' && c.nome_da_coluna === col);
                   const totalizer = config?.totalizador || 'Nenhum';
@@ -1551,18 +1585,23 @@ export default function ProdutosPage() {
                 }}
                 acoes={(r: Produto) => (
                   <>
-                    <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
-                    {(r.tipo_produto === 'variacao_simples' || r.tipo_produto === 'variacao_atributo') && (
+                    {/* Variantes e Composição nunca aparecem juntas: dividem a mesma posição */}
+                    {r.tipo_produto === 'variacao_simples' || r.tipo_produto === 'variacao_atributo' ? (
                       <BotaoAcao icone={Layers} titulo="Variantes" descricao="Abre as variantes do produto" onClick={() => openVariantes(r)} />
-                    )}
-                    {r.tipo_produto === 'composto' && (
+                    ) : r.tipo_produto === 'composto' ? (
                       <BotaoAcao icone={Package} titulo="Composição" descricao="Abre a composição do produto" onClick={() => openComposicao(r)} />
+                    ) : (
+                      <Vazio />
                     )}
                     <BotaoAcao icone={Boxes} titulo="Embalagens" descricao="Fardo, caixa e outras embalagens do produto" onClick={() => openEmbalagens(r)} />
+                    <BotaoAcao icone={ImageIcon} titulo="Imagens" descricao="Fotos do produto (uma é a principal)" onClick={() => openImagens(r)} />
                     <BotaoAcao icone={Replace} titulo="Similares" descricao="Produtos a oferecer no lugar deste quando faltar estoque" onClick={() => openRelacionados(r, 'similares')} />
                     <BotaoAcao icone={ShoppingBasket} titulo="Sugestões" descricao="Produtos a oferecer junto com este na venda" onClick={() => openRelacionados(r, 'sugestoes')} />
                     <BotaoAcao icone={Receipt} titulo="Dados fiscais" descricao="NCM, CEST, grupo tributário e serviço (NF-e e NFS-e)" onClick={() => openFiscal(r)} />
+                    <BotaoAcao icone={Warehouse} titulo="Estoque" descricao="Quantidade do produto em cada localização da filial" onClick={() => { setSelectedProduto(r); setActiveTab('estoque'); }} />
+                    <BotaoAcao icone={ArrowLeftRight} titulo="Movimento" descricao="Entradas, saídas e transferências deste produto" onClick={() => router.push(`/movimento?produto_id=${r.id}`)} />
                     <SeparadorAcoes />
+                    <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
                     <BotaoAcao icone={Trash2} titulo="Excluir" descricao="Apaga o registro (pede confirmação)" tom="perigo" onClick={() => handleDeleteProduto(r.id)} />
                   </>
                 )}
@@ -1621,6 +1660,10 @@ export default function ProdutosPage() {
             </div>
           ) : activeTab === 'embalagens' && selectedProduto ? (
             <EmbalagensProduto produtoId={selectedProduto.id} onVoltar={closeTab} />
+          ) : activeTab === 'estoque' && selectedProduto ? (
+            <EstoqueProduto produtoId={selectedProduto.id} onVoltar={closeTab} />
+          ) : activeTab === 'imagens' && selectedProduto ? (
+            <ImagensProduto produto={selectedProduto} onVoltar={() => { loadProdutos(true); closeTab(); }} />
           ) : (activeTab === 'similares' || activeTab === 'sugestoes') && selectedProduto ? (
             <ProdutosRelacionados key={activeTab} tipo={activeTab} produtoId={selectedProduto.id} produtos={produtos} onVoltar={closeTab} />
           ) : activeTab === 'fiscal' && selectedProduto ? (

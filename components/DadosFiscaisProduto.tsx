@@ -173,6 +173,8 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
     >
       {erro && <AvisoErro mensagem={erro} onFechar={() => setErro(null)} />}
 
+      <ResumoRegistro titulo="Dados fiscais do produto" nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
+
       {ausentes.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
           <b>Faltam colunas em cad_produtos</b> para alguns campos desta tela ({ausentes.join(', ')}). Eles aparecem desabilitados. Rode o script{' '}
@@ -180,7 +182,6 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
         </div>
       )}
 
-      <ResumoRegistro titulo="Dados fiscais do produto" nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
 
       <SecaoCrm titulo="Identificação na nota">
         <GradeCampos>

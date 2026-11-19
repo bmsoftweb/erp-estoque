@@ -5,12 +5,14 @@ import './app/globals.css';
 import '@/lib/origemMaster'; // antes das telas: guarda a marca ?master=1 antes que o roteamento troque o endereço
 import { ThemeProvider } from '@/context/ThemeContext';
 import { App } from './App';
+import { Dica } from './components/Dica';
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <ThemeProvider>
         <App />
+        <Dica />
       </ThemeProvider>
     </BrowserRouter>
   </React.StrictMode>,

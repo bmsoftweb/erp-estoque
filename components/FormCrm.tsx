@@ -189,7 +189,7 @@ export const FormCrm: React.FC<FormCrmProps> = ({ id, onSubmit, onCancel, saving
           e.preventDefault(); // sem isso o navegador envia o formulário e recarrega a página
           onSubmit(e);
         }}
-        className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800"
+        className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900"
       >
         {/* Corpo rolável; a barra de ações fica fixa no pé da tela */}
         <div className="flex-1 overflow-y-auto min-h-0">
@@ -393,10 +393,10 @@ export const TelaCheia: React.FC<TelaCheiaProps> = ({ rodape, onVoltar, rotuloVo
             },
           }
         : {})}
-      className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800"
+      className="flex-1 flex flex-col min-h-0 bg-white dark:bg-stone-900"
     >
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className={(larga ? "" : "max-w-5xl mx-auto ") + "w-full px-5 py-5 space-y-5"}>{children}</div>
+        <div className={(larga ? "" : "max-w-5xl mx-auto ") + "w-full min-h-full flex flex-col px-5 py-5 space-y-5"}>{children}</div>
       </div>
       <div className="shrink-0 px-5 py-3 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between gap-2.5 bg-stone-50 dark:bg-stone-950">
         <span className="text-[11px] text-stone-500 dark:text-stone-400 truncate">{rodape}</span>
@@ -427,9 +427,9 @@ export const TelaCheia: React.FC<TelaCheiaProps> = ({ rodape, onVoltar, rotuloVo
   );
 };
 
-/** Resumo do registro-pai no alto das telas de composição e variantes */
+/** Resumo do registro-pai no alto das telas de composição e variantes: faixa chapada, de borda a borda (anula o padding da TelaCheia) */
 export const ResumoRegistro: React.FC<{ titulo: string; nome?: string; sku?: string; id?: number | string; descricao?: string }> = ({ titulo, nome, sku, id, descricao }) => (
-  <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950/40 px-4 py-3">
+  <div className="-mx-5 -mt-5 border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950/40 px-5 py-3">
     <div className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">{titulo}</div>
     <div className="mt-0.5 text-sm font-bold text-stone-900 dark:text-stone-100">{nome}</div>
     <div className="mt-0.5 flex items-center gap-3 text-[11px] text-stone-500 dark:text-stone-400">

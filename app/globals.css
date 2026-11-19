@@ -242,6 +242,10 @@ body {
   select:not([multiple]) option {
     padding: 6px 12px;
     font-size: 0.75rem;
+    color: #292524;
+  }
+  .dark select:not([multiple]) option {
+    color: #f5f5f4;
   }
   select:not([multiple]) option::checkmark {
     display: none;

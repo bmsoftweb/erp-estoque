@@ -13,6 +13,7 @@ import Marcas from './app/marcas/page';
 import Usuarios from './app/users/page';
 import CadSample from './app/cad_sample/page';
 import Precos from './app/precos/page';
+import Chassi from './app/chassi/page';
 
 /** Uma rota por tela (antes, uma pasta por tela no app/ do Next) */
 export const App: React.FC = () => (
@@ -29,6 +30,7 @@ export const App: React.FC = () => (
       <Route path="/marcas" element={<Marcas />} />
       <Route path="/users" element={<Usuarios />} />
       <Route path="/precos" element={<Precos />} />
+      <Route path="/chassi" element={<Chassi />} />
       <Route path="/cad_sample" element={<CadSample />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />

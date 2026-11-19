@@ -1,9 +1,10 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
+import { put, del } from '@vercel/blob';
 import { getIronSession } from 'iron-session';
 import { sessionOptions, SessionData } from './session.js';
 import { getDb, colunasInfo } from './db.js';
 import { lerConfigGrid } from './config-grid.js';
-import { grupoDa, ehDoGrupo } from './empresa.js';
+import { grupoDa, ehDoGrupo, empresaDa } from './empresa.js';
 import { gtinValido } from '../lib/gtin.js';
 import { rotasRelacionados } from './produtos-relacionados.js';
 
@@ -181,7 +182,7 @@ export function createProdutosRouter() {
       const validColumns: string[] = (await colunasInfo(db, dbName, 'cad_produtos')).map((c: any) => c.COLUMN_NAME);
   
       // Add standard joined fields to valid columns
-      validColumns.push('categoria_nome', 'marca_nome', 'variantes_count', 'atributos_vinculados');
+      validColumns.push('categoria_nome', 'marca_nome', 'variantes_count', 'atributos_vinculados', 'estoque');
   
       // Fetch grid config to handle dynamic joins
       const gridConfigs = await lerConfigGrid(session.userId!);
@@ -192,6 +193,9 @@ export function createProdutosRouter() {
   
       const extraFields: string[] = [];
       const extraJoins: string[] = [];
+      // Miniatura da lista: URL da imagem principal (só nos bancos que têm a tabela de imagens)
+      if ((await colunasInfo(db, dbName, 'cad_produtos_imagens')).length)
+        extraFields.push(`, (SELECT url FROM ${dbName}.cad_produtos_imagens WHERE produto_id = p.id AND principal = 1 LIMIT 1) AS imagem_principal`);
       const joinedTables = new Set<string>();
   
       prodConfigs.forEach((cfg: any) => {
@@ -218,7 +222,12 @@ export function createProdutosRouter() {
           SELECT * FROM (
             SELECT p.*, c.nome as categoria_nome, m.descricao as marca_nome,
             (SELECT COUNT(*) FROM ${dbName}.cad_produtos_variantes WHERE produto_id = p.id AND ativo = 1) as variantes_count,
-            (SELECT GROUP_CONCAT(atributo_id) FROM ${dbName}.cad_produtos_atributos_produtos WHERE produto_id = p.id) as atributos_vinculados
+            (SELECT GROUP_CONCAT(atributo_id) FROM ${dbName}.cad_produtos_atributos_produtos WHERE produto_id = p.id) as atributos_vinculados,
+            -- Estoque total do produto na filial: todas as localizações, lotes e variantes (o mesmo total da opção Estoque)
+            (SELECT IFNULL(SUM(sl.quantidade), 0) FROM ${dbName}.est_estoque_saldo sl
+               JOIN ${dbName}.cad_produtos_lotes l ON l.id = sl.lote_id
+               JOIN ${dbName}.cad_produtos_localizacoes lc ON lc.id = sl.localizacao_id AND lc.empresa_id = ?
+              WHERE l.produto_id = p.id) as estoque
             ${extraFields.join('')}
             FROM ${dbName}.cad_produtos p 
             LEFT JOIN ${dbName}.cad_produtos_categorias c ON p.categoria_id = c.id
@@ -227,8 +236,8 @@ export function createProdutosRouter() {
             WHERE p.ativo = 1 AND p.grupo_id = ?
           ) AS p WHERE 1=1
         `;
-      const params: any[] = [grupoDa(session)];
-  
+      const params: any[] = [empresaDa(session), grupoDa(session)];
+
       // Map column types for smarter filtering
       const colTypes: Record<string, string> = {};
       prodConfigs.forEach((cfg: any) => {
@@ -409,7 +418,9 @@ export function createProdutosRouter() {
         isRelation: col.COLUMN_NAME.endsWith('_id'),
         relationTable: col.COLUMN_NAME.endsWith('_id') ? `cad_produtos_${col.COLUMN_NAME.replace('_id', 's')}` : null
       }));
-  
+      // Coluna calculada (ver GET /produtos): estoque total na filial
+      fields.splice(fields.findIndex((f: any) => f.key === 'preco_venda') + 1, 0, { key: 'estoque', label: 'Estoque', type: 'decimal', isRelation: false, relationTable: null });
+
       return res.json(fields);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
@@ -511,6 +522,110 @@ export function createProdutosRouter() {
       return res.json({ id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, atributos_vinculados, codigo_barras });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Imagens do produto (cad_produtos_imagens): o arquivo vai para o Vercel Blob (store "erp", pasta do módulo)
+   * e a tabela guarda a URL pública. Uma imagem é a principal. Toda rota devolve a lista atualizada.
+   * A tela reduz a foto antes de enviar: a função da Vercel recusa corpo acima de 4,5 MB.
+   */
+  const imagensCtx = async (req: Request, res: Response, comBlob = false) => {
+    const s = await sessao(req, res);
+    if (!s) return void res.status(401).json({ error: 'Não autorizado' });
+    if (comBlob && !process.env.BLOB_READ_WRITE_TOKEN) return void res.status(500).json({ error: 'Armazenamento de imagens não configurado (BLOB_READ_WRITE_TOKEN).' });
+    const db = await getDb();
+    const bd = s.dbConfig?.database;
+    if (!(await colunasInfo(db, bd, 'cad_produtos_imagens')).length) return void res.status(400).json({ error: 'A tabela cad_produtos_imagens não existe neste banco.' });
+    if (!(await ehDoGrupo(db, bd, 'cad_produtos', req.params.id, grupoDa(s)))) return void NAO_ACHOU(res);
+    const listar = async () => {
+      const [r]: any = await db.execute(
+        `SELECT id, url, principal, variante_id FROM ${bd}.cad_produtos_imagens WHERE produto_id = ? ORDER BY principal DESC, ordem, id`,
+        [req.params.id]
+      );
+      return r.map((i: any) => ({ id: i.id, url: i.url, principal: !!i.principal, varianteId: i.variante_id }));
+    };
+    /** variante_id vazio = imagem do produto (vale para todas as variantes); senão a variante tem de ser deste produto */
+    const variante = async (v: any): Promise<number | null> => {
+      if (v === null || v === undefined || v === '') return null;
+      const [r]: any = await db.execute(`SELECT id FROM ${bd}.cad_produtos_variantes WHERE id = ? AND produto_id = ?`, [v, req.params.id]);
+      if (!r.length) throw new Invalido('Variante não encontrada neste produto.');
+      return r[0].id;
+    };
+    return { db, bd, listar, variante };
+  };
+
+  router.get('/produtos/:id/imagens', async (req: Request, res: Response) => {
+    try {
+      const ctx = await imagensCtx(req, res);
+      if (ctx) res.json({ imagens: await ctx.listar() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/produtos/:id/imagens', express.raw({ type: 'image/*', limit: '4mb' }), async (req: Request, res: Response) => {
+    try {
+      const tipo = String(req.headers['content-type'] || '');
+      const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as Record<string, string>)[tipo];
+      if (!ext || !Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'Imagem inválida: use JPG, PNG ou WebP.' });
+      const ctx = await imagensCtx(req, res, true);
+      if (!ctx) return;
+      const atuais = await ctx.listar();
+      if (atuais.length >= 20) return res.status(400).json({ error: 'No máximo 20 imagens por produto.' });
+      const varianteId = await ctx.variante(req.query.variante); // ?variante=ID: a imagem já entra na variante
+      const blob = await put(`estoque/produtos/${ctx.bd}/${req.params.id}.${ext}`, req.body, { access: 'public', contentType: tipo, addRandomSuffix: true });
+      await ctx.db.execute(
+        `INSERT INTO ${ctx.bd}.cad_produtos_imagens (produto_id, variante_id, url, principal, ordem)
+         SELECT ?, ?, ?, ?, COALESCE(MAX(ordem), 0) + 1 FROM ${ctx.bd}.cad_produtos_imagens WHERE produto_id = ?`,
+        [req.params.id, varianteId, blob.url, atuais.length ? 0 : 1, req.params.id]
+      );
+      res.json({ imagens: await ctx.listar() });
+    } catch (error: any) {
+      res.status(error instanceof Invalido ? 400 : 500).json({ error: error.message });
+    }
+  });
+
+  router.patch('/produtos/:id/imagens/:img/variante', async (req: Request, res: Response) => {
+    try {
+      const ctx = await imagensCtx(req, res);
+      if (!ctx) return;
+      const varianteId = await ctx.variante(req.body?.varianteId);
+      const [r]: any = await ctx.db.execute(`UPDATE ${ctx.bd}.cad_produtos_imagens SET variante_id = ? WHERE id = ? AND produto_id = ?`, [varianteId, req.params.img, req.params.id]);
+      if (!r.affectedRows) return res.status(404).json({ error: 'Imagem não encontrada.' });
+      res.json({ imagens: await ctx.listar() });
+    } catch (error: any) {
+      res.status(error instanceof Invalido ? 400 : 500).json({ error: error.message });
+    }
+  });
+
+  router.patch('/produtos/:id/imagens/:img/principal', async (req: Request, res: Response) => {
+    try {
+      const ctx = await imagensCtx(req, res);
+      if (!ctx) return;
+      await ctx.db.execute(`UPDATE ${ctx.bd}.cad_produtos_imagens SET principal = (id = ?) WHERE produto_id = ?`, [req.params.img, req.params.id]);
+      res.json({ imagens: await ctx.listar() });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.delete('/produtos/:id/imagens/:img', async (req: Request, res: Response) => {
+    try {
+      const ctx = await imagensCtx(req, res, true);
+      if (!ctx) return;
+      const img = (await ctx.listar()).find((i: any) => String(i.id) === req.params.img);
+      if (!img) return res.status(404).json({ error: 'Imagem não encontrada.' });
+      await ctx.db.execute(`DELETE FROM ${ctx.bd}.cad_produtos_imagens WHERE id = ? AND produto_id = ?`, [img.id, req.params.id]);
+      await del(img.url).catch(() => {}); // pode já ter sumido do Blob
+      let imagens = await ctx.listar();
+      if (img.principal && imagens.length) {
+        await ctx.db.execute(`UPDATE ${ctx.bd}.cad_produtos_imagens SET principal = 1 WHERE id = ?`, [imagens[0].id]);
+        imagens = await ctx.listar();
+      }
+      res.json({ imagens });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -666,6 +781,42 @@ export function createProdutosRouter() {
         if (e.code === 'ER_NO_SUCH_TABLE') return res.json({ semTabela: true, produto: p[0], embalagens: [] });
         throw e;
       }
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** Estoque do produto em cada localização da filial (somando os lotes; variante separada), de est_estoque_saldo */
+  router.get('/produtos/:id/estoque', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const s = await sessao(req, res);
+      if (!s) return res.status(401).json({ error: 'Não autorizado' });
+      const db = await getDb();
+      const bd = s.dbConfig?.database;
+      const [p]: any = await db.execute(
+        `SELECT p.id, p.sku, p.nome, u.sigla AS unidade_sigla
+           FROM ${bd}.cad_produtos p LEFT JOIN ${bd}.cad_produtos_unidades_medida u ON u.id = p.unidade_id WHERE p.id = ? AND p.grupo_id = ?`,
+        [id, grupoDa(s)],
+      );
+      if (!p.length) return NAO_ACHOU(res);
+      const [linhas]: any = await db.execute(
+        `SELECT c.id AS localizacao_id, c.codigo, c.descricao, c.tipo, v.nome_adicional AS variante,
+                SUM(sl.quantidade) AS quantidade, SUM(sl.reservado) AS reservado
+           FROM ${bd}.est_estoque_saldo sl
+           JOIN ${bd}.cad_produtos_lotes l ON l.id = sl.lote_id
+           JOIN ${bd}.cad_produtos_localizacoes c ON c.id = sl.localizacao_id AND c.empresa_id = ?
+           LEFT JOIN ${bd}.cad_produtos_variantes v ON v.id = l.variante_id
+          WHERE l.produto_id = ?
+          GROUP BY c.id, c.codigo, c.descricao, c.tipo, l.variante_id, v.nome_adicional
+         HAVING SUM(sl.quantidade) <> 0 OR SUM(sl.reservado) <> 0
+          ORDER BY c.codigo, v.nome_adicional`,
+        [empresaDa(s), id],
+      );
+      return res.json({
+        produto: p[0],
+        linhas: linhas.map((x: any) => ({ ...x, quantidade: Number(x.quantidade), reservado: Number(x.reservado), disponivel: Number(x.quantidade) - Number(x.reservado) })),
+      });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }

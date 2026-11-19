@@ -23,8 +23,8 @@ export function createMovimentoRouter() {
       // Get list of valid columns to prevent arbitrary field filtering
       const validColumns: string[] = (await colunasInfo(db, dbName, 'est_estoque_movimentacoes')).map((c: any) => c.COLUMN_NAME);
   
-      // Add standard joined fields to valid columns
-      // validColumns.push('produto_nome', 'usuario_nome', 'variante_nome');
+      // Descrição do produto (com a variante, se houver) vem do cadastro: listada e filtrável como as demais colunas
+      validColumns.push('produto_nome', 'saldo');
   
       // Fetch grid config to handle dynamic joins
       const gridConfigs = await lerConfigGrid(session.userId!);
@@ -56,9 +56,19 @@ export function createMovimentoRouter() {
   
       let query = `
           SELECT * FROM (
-            SELECT p.*
+            SELECT p.*, CONCAT(pr.nome, IFNULL(CONCAT(' — ', va.nome_adicional), '')) AS produto_nome,
+              -- Data/hora do lançamento como texto (horário de Brasília, como gravado): não passa por Date, que no
+              -- servidor em UTC (Vercel) deslocaria 3 h
+              DATE_FORMAT(p.date_insert, '%Y-%m-%d %H:%i:%s') AS data_hora,
+              -- Saldo do produto/variante na filial logo depois do movimento (ficha de estoque); calculado antes dos
+              -- filtros, sobre todos os movimentos. Transferência e reserva não mudam a quantidade total (ver estoque.ts)
+              SUM(CASE WHEN p.tipo IN ('entrada', 'ajuste_positivo', 'producao_entrada') THEN p.quantidade
+                       WHEN p.tipo IN ('saida', 'ajuste_negativo', 'perda', 'producao_saida') THEN -p.quantidade
+                       ELSE 0 END) OVER (PARTITION BY p.produto_id, p.variante_id ORDER BY p.id) AS saldo
             ${extraFields.join('')}
             FROM ${dbName}.est_estoque_movimentacoes p
+            LEFT JOIN ${dbName}.cad_produtos pr ON pr.id = p.produto_id
+            LEFT JOIN ${dbName}.cad_produtos_variantes va ON va.id = p.variante_id
             ${extraJoins.join('')}
             WHERE p.empresa_id = ?
           ) AS p WHERE 1=1
@@ -184,7 +194,11 @@ export function createMovimentoRouter() {
         isRelation: col.COLUMN_NAME.endsWith('_id'),
         relationTable: col.COLUMN_NAME.endsWith('_id') ? `cad_produtos_${col.COLUMN_NAME.replace('_id', 's')}` : null
       }));
-  
+      // Coluna do JOIN com o cadastro (ver GET /movimento)
+      fields.splice(fields.findIndex((f: any) => f.key === 'produto_id') + 1, 0, { key: 'produto_nome', label: 'Produto', type: 'varchar', isRelation: false, relationTable: null });
+      fields.splice(fields.findIndex((f: any) => f.key === 'quantidade') + 1, 0, { key: 'saldo', label: 'Saldo', type: 'decimal', isRelation: false, relationTable: null });
+      fields.splice(fields.findIndex((f: any) => f.key === 'id') + 1, 0, { key: 'data_hora', label: 'Data/Hora', type: 'datetime', isRelation: false, relationTable: null });
+
       return res.json(fields);
     } catch (error: any) {
       return res.status(500).json({ error: error.message });

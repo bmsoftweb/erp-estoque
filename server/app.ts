@@ -4,6 +4,7 @@ import { createAtributosRouter } from './atributos.js';
 import { createCategoriasRouter } from './categorias.js';
 import { createDashboardRouter } from './dashboard.js';
 import { createFiscalRouter } from './fiscal.js';
+import { createImagensWebRouter } from './imagens-web.js';
 import { createLocalizacoesRouter } from './localizacoes.js';
 import { createLotesRouter } from './lotes.js';
 import { createMarcasRouter } from './marcas.js';
@@ -28,6 +29,7 @@ export function createApp() {
   app.use('/api', createCategoriasRouter());
   app.use('/api', createDashboardRouter());
   app.use('/api', createFiscalRouter());
+  app.use('/api', createImagensWebRouter());
   app.use('/api', createLocalizacoesRouter());
   app.use('/api', createLotesRouter());
   app.use('/api', createMarcasRouter());

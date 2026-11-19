@@ -19,7 +19,7 @@ import { ListaCrm } from '@/components/ListaCrm';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AbasCrm } from '@/components/TelaHeader';
 import { FormCrm, Campo, INPUT_CLASS, TelaCheia, SecaoCrm, GradeCampos } from '@/components/FormCrm';
-import { BotaoAcao } from '@/components/MenuAcoes';
+import { BotaoAcao, SeparadorAcoes } from '@/components/MenuAcoes';
 
 interface Atributo {
   id: number;
@@ -371,6 +371,7 @@ export default function AtributosPage() {
               acoes={(r: any) => (
                 <>
                   <BotaoAcao icone={ListChecks} titulo="Valores" descricao="Abre os valores do atributo" onClick={() => setActiveAttr(r)} />
+                  <SeparadorAcoes />
                   <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
                   <BotaoAcao icone={Trash2} titulo="Excluir" descricao="Apaga o registro (pede confirmação)" tom="perigo" onClick={() => handleDeleteAtributo(r.id)} />
                 </>

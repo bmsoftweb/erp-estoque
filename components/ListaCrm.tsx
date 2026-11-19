@@ -1,12 +1,13 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Menu, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Eye, EyeOff, Loader2, Menu, Plus, Search, X } from 'lucide-react';
 import { INPUT_CLASS } from '@/components/FormCrm';
 import { Toggle } from '@/components/Toggle';
 import { MenuAcoes } from '@/components/MenuAcoes';
 import { NoCanto } from '@/components/AvisoErro';
 import { gravarConfigLista, lerConfigListas } from '@/lib/config-listas-cliente';
+import { gravarSessao, lerSessao } from '@/lib/utils';
 
 /**
  * Lista no modelo do crmWeb (CrudView): ordem física [indicador 30px] [dados…] [sobra] [Ações].
@@ -33,12 +34,14 @@ interface Prefs {
   ordem: string[];
   grade: Grade;
   visiveis: string[] | null;
+  /** Olho do cabeçalho Ações: true = ícones soltos, false = menu "..."; ausente = regra pelo número de ações (acoesEmMenu) */
+  acoesAbertas?: boolean;
 }
 
 const PADRAO: Prefs = { modo: 'manual', larguras: {}, ordem: [], grade: 'ambas', visiveis: null };
 const MIN = 50;
 const W_IND = 30;
-const W_ACOES = 96; // w-24
+const W_ACOES = 120;
 
 
 interface Props<T> {
@@ -51,9 +54,9 @@ interface Props<T> {
   vazio?: React.ReactNode;
   /** Duplo clique na linha */
   onEditar?: (linha: T) => void;
-  /** Itens (BotaoAcao) da coluna Ações; mais de 3 → usar menu */
+  /** Itens (BotaoAcao) da coluna Ações; mais de 4 → acoesEmMenu */
   acoes?: (linha: T) => React.ReactNode;
-  /** true quando há mais de 3 ações: um único "..." com menu */
+  /** true quando há mais de 4 ações: abre com um único "..." com menu (o olho do cabeçalho alterna) */
   acoesEmMenu?: boolean;
   /** Linha extra renderizada logo abaixo de uma linha (mestre-detalhe) */
   detalhe?: (linha: T) => React.ReactNode;
@@ -83,23 +86,38 @@ interface Props<T> {
 }
 
 export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenavel = true, carregando, vazio, onEditar, acoes, acoesEmMenu, detalhe, expansivel, aberta, onAlternar, rodape, ordemExterna, onOrdenar, extraMenu, onNovo, rotuloNovo = 'Novo', barraExtra, buscar = true, paginar = true, className = 'max-h-[calc(100vh-var(--altura-topo))]' }: Props<T>) {
+  // Seleção, busca, página, ordem e rolagem ficam na aba do navegador: abrir um registro ou ir para outra tela e voltar devolve a lista como estava
+  const chaveVista = 'lista:' + id;
+  const [vista] = useState(() => lerSessao<any>(chaveVista, {}));
   const [prefs, setPrefs] = useState<Prefs>(PADRAO);
-  const [ordem, setOrdem] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  const [ordem, setOrdem] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(vista.ordem ?? null);
   const [sobra, setSobra] = useState(true);
-  const [selecionada, setSelecionada] = useState<string | number | null>(null);
+  const [selecionada, setSelecionada] = useState<string | number | null>(vista.selecionada ?? null);
   const [menu, setMenu] = useState<{ top: number; left: number } | null>(null);
   const [subColunas, setSubColunas] = useState(false);
   const [toast, setToast] = useState<{ texto: string; erro?: boolean } | null>(null);
   const area = useRef<HTMLDivElement>(null);
   const tabela = useRef<HTMLTableElement>(null);
   const botaoMenu = useRef<HTMLButtonElement>(null);
+  const thAcoes = useRef<HTMLTableCellElement>(null);
+  /**
+   * Com mais de 4 ações (acoesEmMenu) o olho do cabeçalho alterna o menu "..." e os ícones soltos;
+   * abre no menu e a escolha vai para o config_listas no "Salvar Configuração". Até 4: sempre soltos, sem olho.
+   */
+  const acoesAbertas = !acoesEmMenu || (prefs.acoesAbertas ?? false);
+  const alternarAcoes = () => setPrefs((p) => ({ ...p, acoesAbertas: !acoesAbertas }));
+  const emMenu = !acoesAbertas;
+  // Ícones soltos: a coluna cresce até caber todos (com até 4, fica nos 120 px)
+  const wAcoes = emMenu ? 'w-[120px] min-w-[120px] max-w-[120px]' : 'w-auto min-w-[120px]';
   const arrastada = useRef<string | null>(null);
 
   const ordemAtiva = onOrdenar ? (ordemExterna && ordemExterna.dir !== 'none' ? { key: ordemExterna.key, dir: ordemExterna.dir } : null) : ordem;
 
-  const [busca, setBusca] = useState('');
-  const [limite, setLimite] = useState(25);
-  const [pagina, setPagina] = useState(1);
+  const [busca, setBusca] = useState<string>(vista.busca ?? '');
+  const [limite, setLimite] = useState<number>(vista.limite ?? 25);
+  const [pagina, setPagina] = useState<number>(vista.pagina ?? 1);
+  const rolagem = useRef<number>(vista.rolagem ?? 0);
+  const rolagemVolta = useRef(rolagem.current > 0);
 
   const linhasOrd = useMemo(() => {
     if (!ordem || onOrdenar) return linhasOrigem;
@@ -126,6 +144,15 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
   const paginaAtual = Math.min(pagina, totalPaginas);
   const linhas = paginar ? filtradas.slice((paginaAtual - 1) * limite, paginaAtual * limite) : filtradas;
   const total = filtradas.length;
+
+  const guardarVista = () => gravarSessao(chaveVista, { selecionada, busca, limite, pagina, ordem, rolagem: rolagem.current });
+  useEffect(guardarVista, [chaveVista, selecionada, busca, limite, pagina, ordem]);
+  // Rolagem volta uma vez, quando as linhas já estão na tela
+  useLayoutEffect(() => {
+    if (!rolagemVolta.current || carregando || !linhas.length || !area.current) return;
+    area.current.scrollTop = rolagem.current;
+    rolagemVolta.current = false;
+  }, [carregando, linhas.length]);
 
   const ordenar = (key: string) => (onOrdenar ? onOrdenar(key) : ordenavel && setOrdem((o) => (o?.key !== key ? { key, dir: 'asc' } : o.dir === 'asc' ? { key, dir: 'desc' } : null)));
 
@@ -196,7 +223,7 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
         return;
       }
       // ajustar: reparte a área livre proporcional às larguras naturais, sem sobra
-      const disponivel = Math.max(0, (area.current?.clientWidth ?? 0) - W_IND - W_ACOES);
+      const disponivel = Math.max(0, (area.current?.clientWidth ?? 0) - W_IND - (thAcoes.current?.offsetWidth ?? W_ACOES));
       const soma = chaves.reduce((s, k) => s + nat[k], 0) || 1;
       const r: Record<string, number> = {};
       let usado = 0;
@@ -376,7 +403,7 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
         </div>
       )}
 
-      <div ref={area} className="relative overflow-auto flex-1 min-h-0 border-b border-stone-200 dark:border-stone-800">
+      <div ref={area} onScroll={(e) => { rolagem.current = e.currentTarget.scrollTop; guardarVista(); }} className="relative overflow-auto flex-1 min-h-0 border-b border-stone-200 dark:border-stone-800">
       <table ref={tabela} className="w-full text-xs border-separate border-spacing-0">
         <thead className="sticky top-0 z-10">
           <tr>
@@ -409,7 +436,14 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
               </th>
             ))}
             {sobra && <th className="w-full border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950" />}
-            <th className="sticky right-0 z-20 w-24 min-w-24 max-w-24 px-3 py-2.5 text-center font-semibold text-stone-600 dark:text-stone-300 border-b border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950">Ações</th>
+            <th ref={thAcoes} className={`sticky right-0 z-20 ${wAcoes} px-3 py-2.5 text-center font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap border-b border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950`}>
+              Ações
+              {acoesEmMenu && acoes && (
+                <button type="button" onClick={alternarAcoes} title={acoesAbertas ? 'Voltar as ações para o menu' : 'Mostrar todas as ações na coluna'} className="ml-1.5 p-0.5 rounded align-middle text-stone-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-950/40 cursor-pointer">
+                  {acoesAbertas ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </th>
           </tr>
         </thead>
         <tbody className={carregando && linhas.length ? 'opacity-60' : ''}>
@@ -440,8 +474,8 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
                     </td>
                   ))}
                   {sobra && <td className={bB} />}
-                  <td className={`sticky right-0 z-[5] w-24 min-w-24 max-w-24 px-3 py-[7.5px] text-center whitespace-nowrap bg-inherit border-l border-stone-200 dark:border-stone-800 ${bB}`}>
-                    <div className="flex items-center justify-center gap-0.5">{acoesEmMenu ? <MenuAcoes>{acoes?.(l)}</MenuAcoes> : acoes?.(l)}</div>
+                  <td className={`sticky right-0 z-[5] ${wAcoes} px-3 py-[7.5px] text-center whitespace-nowrap bg-inherit border-l border-stone-200 dark:border-stone-800 ${bB}`}>
+                    <div className="flex items-center justify-center gap-0.5">{emMenu ? <MenuAcoes>{acoes?.(l)}</MenuAcoes> : acoes?.(l)}</div>
                   </td>
                 </tr>
                 {abertaL && detalhe && (
@@ -473,7 +507,7 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
                 </td>
               ))}
               {sobra && <td className="border-t border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950" />}
-              <td className="sticky right-0 z-20 w-24 min-w-24 max-w-24 border-t border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950" />
+              <td className={`sticky right-0 z-20 ${wAcoes} border-t border-l border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-950`} />
             </tr>
           </tfoot>
         )}

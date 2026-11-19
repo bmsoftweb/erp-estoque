@@ -106,13 +106,14 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
     >
       {erro && <AvisoErro mensagem={erro} onFechar={() => setErro(null)} />}
 
+      <ResumoRegistro titulo="Embalagens do produto" nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
+
       {semTabela && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
           <b>A tabela de embalagens ainda não existe no banco.</b> Rode o script <span className="font-mono">extras/2026-11-10_embalagens.sql</span> no banco do ERP e abra esta tela de novo.
         </div>
       )}
 
-      <ResumoRegistro titulo="Embalagens do produto" nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
       <p className="text-xs text-stone-500 dark:text-stone-400">
         O estoque e o preço base ficam na unidade do produto ({un}, {moeda(base)}). Cada embalagem diz quantas unidades ela traz: vender 2 fardos de 12 baixa 24 do estoque.
         Bipar o código de barras da embalagem no caixa já escolhe a embalagem.

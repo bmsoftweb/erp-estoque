@@ -167,13 +167,14 @@ export const ProdutosRelacionados: React.FC<{ tipo: TipoRelacionado; produtoId: 
     <TelaCheia rodape={'Produto #' + produtoId + ' • ' + t.aba} onVoltar={onVoltar} onSubmit={salvar} rotuloPrincipal="Salvar" iconePrincipal={<Save className="w-4 h-4" />} salvando={salvando}>
       {erro && <AvisoErro mensagem={erro} onFechar={() => setErro(null)} />}
 
+      <ResumoRegistro titulo={t.titulo} nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
+
       {semTabela && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
           <b>A tabela de {t.remover} ainda não existe no banco.</b> Rode o script <span className="font-mono">{t.script}</span> no banco do ERP e abra esta tela de novo.
         </div>
       )}
 
-      <ResumoRegistro titulo={t.titulo} nome={produto?.nome} sku={produto?.sku} id={produto?.id} />
       <p className="text-xs text-stone-500 dark:text-stone-400">
         {t.descricao}
         {!semTabela && (
