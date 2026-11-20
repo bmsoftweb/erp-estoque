@@ -19,6 +19,7 @@ const TELAS: Record<string, { titulo: string; subtitulo: string; semCabecalho?: 
   '/localizacoes': { titulo: 'Localizações', subtitulo: 'Locais de armazenagem do estoque' },
   '/unidades': { titulo: 'Unidades', subtitulo: 'Unidades de medida dos produtos' },
   '/marcas': { titulo: 'Marcas', subtitulo: 'Cadastro de marcas de produtos' },
+  '/dados-fiscais': { titulo: 'Dados Fiscais', subtitulo: 'Tabelas oficiais de NCM, CEST e IBS/CBS (LC 214)' },
   '/chassi': { titulo: 'Chassi', subtitulo: 'Pesquisa pelo chassi do veículo' },
   '/users': { titulo: 'Usuários', subtitulo: 'Usuários com acesso ao sistema' },
   // Tela de exemplo: tem o próprio cabeçalho

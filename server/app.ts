@@ -13,6 +13,7 @@ import { createPrecosRouter } from './precos.js';
 import { createProdutosRouter } from './produtos.js';
 import { createProdutosV2Router } from './produtosV2.js';
 import { createStatsRouter } from './stats.js';
+import { createTabelasFiscaisRouter } from './tabelasFiscais.js';
 import { createUnidadesRouter } from './unidades.js';
 import { createUsuariosRouter } from './usuarios.js';
 
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/api', createProdutosRouter());
   app.use('/api', createProdutosV2Router());
   app.use('/api', createStatsRouter());
+  app.use('/api', createTabelasFiscaisRouter());
   app.use('/api', createUnidadesRouter());
   app.use('/api', createUsuariosRouter());
 

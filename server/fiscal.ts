@@ -63,6 +63,24 @@ export function createFiscalRouter() {
           } else if (soDigitos) { sql = `${base} WHERE cest LIKE ? GROUP BY cest ORDER BY cest LIMIT 30`; params = [like(num) + '%']; }
           else if (texto) { sql = `${base} WHERE ${todas('descricao')} GROUP BY cest ORDER BY cest LIMIT 30`; params = pal(); }
           else return res.json([]);
+        } else if (tabela === 'cfop') {
+          // CFOP de saída na NF-e e em vigor; &inicio=5 (dentro da UF) ou 6 (outra UF)
+          const inicio = (q.get('inicio') || '').replace(/\D/g, '').slice(0, 1);
+          const base = `SELECT cfop AS codigo, titulo AS descricao FROM ${dbName}.fis_cfop
+                         WHERE ind_nfe = 1 AND (fim_vigencia IS NULL OR fim_vigencia >= CURDATE()) AND cfop LIKE ?`;
+          const pre = [(inicio || '') + '%'];
+          if (codigo) { sql = `SELECT cfop AS codigo, titulo AS descricao FROM ${dbName}.fis_cfop WHERE cfop = ? LIMIT 1`; params = [codigo]; }
+          else if (soDigitos) { sql = `${base} AND cfop LIKE ? ORDER BY cfop LIMIT 30`; params = [...pre, like(num) + '%']; }
+          else if (texto) { sql = `${base} AND ${todas('titulo')} ORDER BY cfop LIMIT 30`; params = [...pre, ...pal()]; }
+          else { sql = `${base} ORDER BY cfop LIMIT 30`; params = pre; }
+        } else if (tabela === 'cclass') {
+          // cClassTrib do IBS/CBS que valem na NF-e e estão em vigor (Conformidade Fácil); a descrição leva o CST
+          const base = `SELECT cclass_trib AS codigo, CONCAT('CST ', cst, ' • ', descricao) AS descricao FROM ${dbName}.fis_cclass_trib`;
+          const vale = 'ind_nfe = 1 AND (fim_vigencia IS NULL OR fim_vigencia >= CURDATE())';
+          if (codigo) { sql = `${base} WHERE cclass_trib = ? LIMIT 1`; params = [codigo]; }
+          else if (soDigitos) { sql = `${base} WHERE ${vale} AND cclass_trib LIKE ? ORDER BY cclass_trib LIMIT 30`; params = [like(num) + '%']; }
+          else if (texto) { sql = `${base} WHERE ${vale} AND ${todas('descricao')} ORDER BY cclass_trib LIMIT 30`; params = pal(); }
+          else { sql = `${base} WHERE ${vale} ORDER BY cclass_trib LIMIT 200`; }
         } else {
           return res.status(400).json({ error: 'tabela inválida' });
         }
@@ -78,6 +96,35 @@ export function createFiscalRouter() {
         if (codigo.length !== 8) return res.json({ encontrado: false });
         const [rows]: any = await db.execute(`SELECT ncm, nome, fim_vigencia FROM ${dbName}.fis_ncm WHERE ncm = ? LIMIT 1`, [codigo]);
         return res.json(rows.length ? { encontrado: true, ...rows[0] } : { encontrado: false });
+      }
+      // IBS/CBS (LC 214): anexos em que o NCM (8 dígitos) ou a NBS (9 ou 10) consta e os cClassTrib ligados a cada anexo
+      // (Conformidade Fácil, tela Dados Fiscais); para NBS valem os cClassTrib da NFS-e
+      if (tipo === 'ibscbs') {
+        if (codigo.length < 8 || codigo.length > 10) return res.json({ tabela: true, anexos: [] });
+        const ncm = codigo.length === 8;
+        try {
+          const [rows]: any = await db.execute(
+            `SELECT a.anexo, a.permitido, a.condicao, a.descricao_anexo, c.cclass_trib, c.cst, c.descricao, c.p_red_ibs, c.p_red_cbs
+               FROM ${dbName}.fis_ibscbs_anexos a
+               LEFT JOIN ${dbName}.fis_cclass_trib c ON c.anexo = a.anexo AND ${ncm ? 'c.ind_nfe' : 'c.ind_nfse'} = 1 AND (c.fim_vigencia IS NULL OR c.fim_vigencia >= CURDATE())
+              WHERE a.tipo = ? AND a.codigo = ? AND (a.fim_vigencia IS NULL OR a.fim_vigencia >= CURDATE())
+              ORDER BY a.anexo, c.cclass_trib`,
+            [ncm ? 'NCM' : 'NBS', codigo],
+          );
+          // uma entrada por anexo; "não permitido" = o NCM só aparece nele como exceção
+          const porAnexo = new Map<number, any>();
+          for (const r of rows) {
+            const x = porAnexo.get(r.anexo) ?? porAnexo.set(r.anexo, { anexo: r.anexo, descricao: r.descricao_anexo, condicoes: [], permitido: false, cclass: [] }).get(r.anexo);
+            if (r.permitido !== 0) x.permitido = true;
+            if (r.condicao && !x.condicoes.includes(r.condicao)) x.condicoes.push(r.condicao);
+            if (r.cclass_trib && !x.cclass.some((k: any) => k.cclass_trib === r.cclass_trib))
+              x.cclass.push({ cclass_trib: r.cclass_trib, cst: r.cst, descricao: r.descricao, p_red_ibs: Number(r.p_red_ibs), p_red_cbs: Number(r.p_red_cbs) });
+          }
+          return res.json({ tabela: true, anexos: [...porAnexo.values()] });
+        } catch (e: any) {
+          if (e.code === 'ER_NO_SUCH_TABLE') return res.json({ tabela: false, anexos: [] });
+          throw e;
+        }
       }
       // CEST candidatos ao NCM (o NCM do item começa com o prefixo do anexo) e se consta na lista da escala (Anexo XXVII)
       if (tipo === 'cest') {

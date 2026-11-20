@@ -1877,7 +1877,7 @@ export default function MovimentoPage() {
                                 }
                                 onChange={(e) => formData.tipo === 'entrada' && setFormData({...formData, lote_id: e.target.value})}
                                 disabled={formData.tipo !== 'entrada'}
-                                className={`w-full bg-elegant-bg border border-elegant-border rounded p-2 text-sm ${formData.tipo !== 'entrada' ? 'opacity-80' : ''}`} 
+                                className={`w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded p-2 text-sm ${formData.tipo !== 'entrada' ? 'opacity-80' : ''}`} 
                                 placeholder={formData.tipo === 'entrada' ? "Digite um novo lote ou use a lupa..." : "Clique na lupa para buscar..."}
                               />
                               <button 

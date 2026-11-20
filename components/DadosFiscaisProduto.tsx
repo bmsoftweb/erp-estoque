@@ -3,6 +3,7 @@ import { Loader2, Save } from 'lucide-react';
 import { AvisoErro, NoCanto } from '@/components/AvisoErro';
 import { Toggle } from '@/components/Toggle';
 import { ComboTabela } from '@/components/ComboTabela';
+import { QuadroIbsCbs } from '@/components/QuadroIbsCbs';
 import { Campo, GradeCampos, INPUT_CLASS, ResumoRegistro, SecaoCrm, TelaCheia } from '@/components/FormCrm';
 import { formatNumber, parseBankingInput } from '@/lib/utils';
 
@@ -164,6 +165,7 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
 
   return (
     <TelaCheia
+      larga
       rodape={'Produto #' + produtoId + ' • Dados fiscais'}
       onVoltar={onVoltar}
       onSubmit={salvar}
@@ -233,7 +235,7 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
               !tem('cest')
                 ? AVISO_COLUNA
                 : cestInfo && !cestInfo.tabela
-                ? 'Tabela fis_cest ainda não carregada (extras/2026-11-09_fis_cest.sql e scripts/carregar-cest.ts).'
+                ? 'Tabela fis_cest ainda não carregada (menu Tabelas › Dados Fiscais › CEST).'
                 : ncm.length === 8 && cestInfo && cestInfo.candidatos.filter((c) => !c.generico).length === 0
                 ? cestInfo.candidatos.length
                   ? 'Sem CEST específico para este NCM no Conv. ICMS 142/18 (há só itens genéricos por capítulo, que costumam não se aplicar): informe só se o seu cadastro tiver um.'
@@ -308,6 +310,7 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
             ))}
           </div>
         )}
+        {ncm.length === 8 && <QuadroIbsCbs codigo={ncm} cclassGrupo={grupo?.cclass_trib} className="mt-3" />}
       </SecaoCrm>
 
       <SecaoCrm titulo="Serviço (NFS-e)">

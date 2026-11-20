@@ -54,6 +54,8 @@ interface Props<T> {
   vazio?: React.ReactNode;
   /** Duplo clique na linha */
   onEditar?: (linha: T) => void;
+  /** Clique na linha (ela fica selecionada): para a tela mostrar um detalhe fora do grid */
+  onSelecionar?: (linha: T) => void;
   /** Itens (BotaoAcao) da coluna Ações; mais de 4 → acoesEmMenu */
   acoes?: (linha: T) => React.ReactNode;
   /** true quando há mais de 4 ações: abre com um único "..." com menu (o olho do cabeçalho alterna) */
@@ -85,7 +87,7 @@ interface Props<T> {
   className?: string;
 }
 
-export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenavel = true, carregando, vazio, onEditar, acoes, acoesEmMenu, detalhe, expansivel, aberta, onAlternar, rodape, ordemExterna, onOrdenar, extraMenu, onNovo, rotuloNovo = 'Novo', barraExtra, buscar = true, paginar = true, className = 'max-h-[calc(100vh-var(--altura-topo))]' }: Props<T>) {
+export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenavel = true, carregando, vazio, onEditar, onSelecionar, acoes, acoesEmMenu, detalhe, expansivel, aberta, onAlternar, rodape, ordemExterna, onOrdenar, extraMenu, onNovo, rotuloNovo = 'Novo', barraExtra, buscar = true, paginar = true, className = 'max-h-[calc(100vh-var(--altura-topo))]' }: Props<T>) {
   // Seleção, busca, página, ordem e rolagem ficam na aba do navegador: abrir um registro ou ir para outra tela e voltar devolve a lista como estava
   const chaveVista = 'lista:' + id;
   const [vista] = useState(() => lerSessao<any>(chaveVista, {}));
@@ -93,6 +95,10 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
   const [ordem, setOrdem] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(vista.ordem ?? null);
   const [sobra, setSobra] = useState(true);
   const [selecionada, setSelecionada] = useState<string | number | null>(vista.selecionada ?? null);
+  const selecionar = (k: string | number, l: T) => {
+    setSelecionada(k);
+    onSelecionar?.(l);
+  };
   const [menu, setMenu] = useState<{ top: number; left: number } | null>(null);
   const [subColunas, setSubColunas] = useState(false);
   const [toast, setToast] = useState<{ texto: string; erro?: boolean } | null>(null);
@@ -455,7 +461,7 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
             return (
               <React.Fragment key={k}>
                 <tr
-                  onClick={() => setSelecionada(k)}
+                  onClick={() => selecionar(k, l)}
                   onDoubleClick={() => onEditar?.(l)}
                   className={`group cursor-default transition-colors ${sel ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800/60'}`}
                 >
@@ -474,7 +480,8 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
                     </td>
                   ))}
                   {sobra && <td className={bB} />}
-                  <td className={`sticky right-0 z-[5] ${wAcoes} px-3 py-[7.5px] text-center whitespace-nowrap bg-inherit border-l border-stone-200 dark:border-stone-800 ${bB}`}>
+                  {/* Na captura: os botões de ação param o clique antes de chegar à linha, mas a linha fica selecionada */}
+                  <td onClickCapture={() => selecionar(k, l)} className={`sticky right-0 z-[5] ${wAcoes} px-3 py-[7.5px] text-center whitespace-nowrap bg-inherit border-l border-stone-200 dark:border-stone-800 ${bB}`}>
                     <div className="flex items-center justify-center gap-0.5">{emMenu ? <MenuAcoes>{acoes?.(l)}</MenuAcoes> : acoes?.(l)}</div>
                   </td>
                 </tr>

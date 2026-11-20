@@ -164,7 +164,7 @@ export const ProdutosRelacionados: React.FC<{ tipo: TipoRelacionado; produtoId: 
   const disp = Number(produto?.disponivel ?? 0);
 
   return (
-    <TelaCheia rodape={'Produto #' + produtoId + ' • ' + t.aba} onVoltar={onVoltar} onSubmit={salvar} rotuloPrincipal="Salvar" iconePrincipal={<Save className="w-4 h-4" />} salvando={salvando}>
+    <TelaCheia larga rodape={'Produto #' + produtoId + ' • ' + t.aba} onVoltar={onVoltar} onSubmit={salvar} rotuloPrincipal="Salvar" iconePrincipal={<Save className="w-4 h-4" />} salvando={salvando}>
       {erro && <AvisoErro mensagem={erro} onFechar={() => setErro(null)} />}
 
       <ResumoRegistro titulo={t.titulo} nome={produto?.nome} sku={produto?.sku} id={produto?.id} />

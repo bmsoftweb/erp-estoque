@@ -239,7 +239,7 @@ export default function UsersManagement() {
                       required
                       value={formData.nome}
                       onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                      className="w-full bg-elegant-bg border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
+                      className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
                       placeholder="Ex: João da Silva"
                     />
                   </div>
@@ -250,7 +250,7 @@ export default function UsersManagement() {
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full bg-elegant-bg border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
+                      className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
                       placeholder="usuario@login.com.br"
                     />
                   </div>
@@ -259,7 +259,7 @@ export default function UsersManagement() {
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                      className="w-full bg-elegant-bg border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm appearance-none cursor-pointer"
+                      className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm appearance-none cursor-pointer"
                     >
                       <option value="user">Operador (user)</option>
                       <option value="admin">Administrador (admin)</option>
@@ -273,7 +273,7 @@ export default function UsersManagement() {
                       required
                       value={formData.senha}
                       onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                      className="w-full bg-elegant-bg border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
+                      className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border focus:border-elegant-accent outline-none rounded-xl py-3 px-4 transition-all text-elegant-text-bright text-sm"
                       placeholder="Defina a senha"
                     />
                   </div>

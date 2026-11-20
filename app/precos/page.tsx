@@ -454,7 +454,7 @@ function PrecoAtual({ escopo, id }: { escopo: ItemForm['escopo']; id: string }) 
 function ItemEscolhido({ escopo, id, onAbrir }: { escopo: ItemForm['escopo']; id: string; onAbrir: () => void }) {
   const op = useOpcao(escopo, id);
   return (
-    <button type="button" onClick={onAbrir} title={`Escolher ${NOME_ESCOPO[escopo]}`} className={INPUT_CLASS + ' campo-botao flex items-center gap-2 text-left cursor-pointer'}>
+    <button type="button" onClick={onAbrir} title={`Escolher ${NOME_ESCOPO[escopo]}`} data-obrigatorio className={INPUT_CLASS + ' campo-botao flex items-center gap-2 text-left cursor-pointer'}>
       <Search className="w-3.5 h-3.5 shrink-0 text-stone-400" />
       <span className={'truncate ' + (id ? 'text-stone-800 dark:text-stone-100' : 'text-stone-400')}>
         {id ? op?.rotulo ?? '…' : escopo === 'produto' ? 'Escolher produto (vale para todas as variantes)…' : `Escolher ${NOME_ESCOPO[escopo]}…`}

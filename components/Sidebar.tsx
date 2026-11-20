@@ -3,7 +3,7 @@ import React, { useLayoutEffect, useState } from 'react';
 import { usePathname, useRouter } from '@/lib/nav';
 import Link from '@/lib/link';
 import {
-  LayoutDashboard, Package, ArrowLeftRight, BadgeDollarSign, Tags, SlidersHorizontal, MapPin, Ruler, BadgeCheck,
+  LayoutDashboard, Package, ArrowLeftRight, BadgeDollarSign, Tags, SlidersHorizontal, MapPin, Ruler, BadgeCheck, Receipt,
   LogOut, Menu, X, User, Sun, Moon, ChevronLeft, ChevronRight, type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
@@ -32,6 +32,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
       { name: 'Localizações', icon: MapPin, href: '/localizacoes' },
       { name: 'Unidades', icon: Ruler, href: '/unidades' },
       { name: 'Marcas', icon: BadgeCheck, href: '/marcas' },
+      { name: 'Dados Fiscais', icon: Receipt, href: '/dados-fiscais' },
     ],
   },
 ];

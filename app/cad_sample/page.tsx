@@ -390,26 +390,26 @@ export default function CadSamplePage() {
                     <div className="grid grid-cols-12 gap-6">
                        <div className="col-span-8">
                           <label className="block text-[11px] uppercase font-black text-elegant-text-label mb-2 tracking-[2px]">Nome do Item</label>
-                          <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full bg-elegant-card border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none font-medium" required />
+                          <input type="text" value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none font-medium" required />
                        </div>
                        <div className="col-span-4">
                           <label className="block text-[11px] uppercase font-black text-elegant-text-label mb-2 tracking-[2px]">SKU / Código</label>
-                          <input type="text" value={formData.sku} onChange={(e) => setFormData({...formData, sku: e.target.value})} className="w-full bg-elegant-card border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none font-mono" />
+                          <input type="text" value={formData.sku} onChange={(e) => setFormData({...formData, sku: e.target.value})} className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none font-mono" />
                        </div>
                     </div>
                     
                     <div className="grid grid-cols-3 gap-6">
                        <div>
                           <label className="block text-[11px] uppercase font-black text-elegant-text-label mb-2 tracking-[2px]">Preço Custo</label>
-                          <input type="text" value={formatCurrency(formData.preco_custo)} onChange={(e) => setFormData({...formData, preco_custo: parseBankingInput(e.target.value)})} className="w-full bg-elegant-card border border-elegant-border rounded-lg p-3.5 text-sm font-mono text-elegant-text-bright focus:border-elegant-accent outline-none" />
+                          <input type="text" value={formatCurrency(formData.preco_custo)} onChange={(e) => setFormData({...formData, preco_custo: parseBankingInput(e.target.value)})} className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded-lg p-3.5 text-sm font-mono text-elegant-text-bright focus:border-elegant-accent outline-none" />
                        </div>
                        <div>
                           <label className="block text-[11px] uppercase font-black text-elegant-text-label mb-2 tracking-[2px]">Preço Venda</label>
-                          <input type="text" value={formatCurrency(formData.preco_venda)} onChange={(e) => setFormData({...formData, preco_venda: parseBankingInput(e.target.value)})} className="w-full bg-elegant-card border border-elegant-border rounded-lg p-3.5 text-sm font-mono text-elegant-text-bright focus:border-elegant-accent outline-none border-elegant-accent/30" />
+                          <input type="text" value={formatCurrency(formData.preco_venda)} onChange={(e) => setFormData({...formData, preco_venda: parseBankingInput(e.target.value)})} className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded-lg p-3.5 text-sm font-mono text-elegant-text-bright focus:border-elegant-accent outline-none border-elegant-accent/30" />
                        </div>
                        <div>
                           <label className="block text-[11px] uppercase font-black text-elegant-text-label mb-2 tracking-[2px]">Status</label>
-                          <select value={formData.ativo} onChange={(e) => setFormData({...formData, ativo: parseInt(e.target.value)})} className="w-full bg-elegant-card border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none">
+                          <select value={formData.ativo} onChange={(e) => setFormData({...formData, ativo: parseInt(e.target.value)})} className="w-full bg-blue-500/[0.03] dark:bg-[#2b2e38] disabled:bg-stone-50 dark:disabled:bg-stone-800/80 border border-elegant-border rounded-lg p-3.5 text-sm text-elegant-text-bright focus:border-elegant-accent outline-none">
                             <option value={1}>Ativo</option>
                             <option value={0}>Inativo</option>
                           </select>

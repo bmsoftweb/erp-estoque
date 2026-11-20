@@ -2,6 +2,20 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.5 — 2026-11-19
+
+- Nova tela Dados Fiscais (menu Tabelas), com uma aba por tabela:
+  - Grupos tributários: cadastro (inclusão e edição; grupo fora de uso fica inativo) e botão "Grupos padrão", que cria os grupos principais do tipo da empresa (Simples Nacional, Lucro Presumido ou Lucro Real).
+  - NCM, CEST, cClassTrib e Anexos da LC 214, cada uma com o botão Atualizar que baixa a tabela da fonte oficial (Siscomex, CONFAZ e Conformidade Fácil da SVRS, com o certificado da empresa; no máximo uma vez por dia).
+  - Nos Anexos, a linha escolhida mostra os anexos e cClassTrib do código num quadro de altura fixa.
+- Grupo tributário aceita CSOSN 500 e CST 60 (ICMS já retido por substituição tributária).
+- Dados fiscais do produto: o quadro de IBS/CBS (anexos e cClassTrib do NCM) virou componente próprio.
+- Listas: clicar nos "..." ou num ícone da coluna Ações também seleciona a linha.
+- Campos: moldura mais clara e, no foco, moldura de 2px na cor da barra (também com a lista do select aberta); seta do select encostada à direita.
+- Lista de preços: vendedores vêm do cadastro de vendedores do erp-vendas (cad_vendedores), das empresas do grupo.
+- Conexão com o banco: fecha as conexões paradas antes de reaproveitar (evita ECONNRESET).
+- Saem os scripts de carga do CEST e do IBS/CBS (a carga agora é pela tela).
+
 ## 0.1.4 — 2026-11-19
 
 - Dicas (tooltips) no padrão BMsoft em todo o app: caixa escura com seta no lugar da dica nativa do navegador.

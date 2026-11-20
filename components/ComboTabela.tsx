@@ -7,7 +7,7 @@ import { INPUT_CLASS } from '@/components/FormCrm';
  * código ou descrição e escolhe na lista, em vez de digitar o código à mão. Busca em /api/fiscal?tipo=buscar.
  */
 
-export type TabelaFiscal = 'ncm' | 'cest' | 'servico' | 'nbs';
+export type TabelaFiscal = 'ncm' | 'cest' | 'servico' | 'nbs' | 'cfop' | 'cclass';
 
 /** Código só com dígitos -> como a norma escreve */
 export const FORMATOS: Record<TabelaFiscal, (c: string) => string> = {
@@ -15,6 +15,8 @@ export const FORMATOS: Record<TabelaFiscal, (c: string) => string> = {
   cest: (c) => c.replace(/^(\d{2})(\d{3})(\d{2})$/, '$1.$2.$3'),
   servico: (c) => c.replace(/^(\d{2})(\d{2})(\d{2})$/, '$1.$2.$3'),
   nbs: (c) => c.replace(/^(\d)(\d{4})(\d{2})(\d{2})$/, '$1.$2.$3.$4'),
+  cfop: (c) => c,
+  cclass: (c) => c,
 };
 
 interface Item {

@@ -12,11 +12,15 @@ const SEM_TABELAS = 'As tabelas de listas de preço ainda não foram criadas no 
  * Opções dos seletores da tela de listas de preço: ?tipo=…&q=texto  ou  ?tipo=…&ids=1,2,3 (rótulos de valores já escolhidos).
  * Devolve [{ valor, rotulo }] (produto e variante trazem também o preco de venda atual); { semTabela: true } quando o cadastro ainda não existe no banco.
  */
-const FONTES: Record<string, { de: string; valor: string; rotulo: string; preco?: string; busca: string; filtro?: string; ordem: string; porGrupo?: boolean }> = {
+const FONTES: Record<string, { de: string; valor: string; rotulo: string; preco?: string; busca: string; filtro?: string; ordem: string; porGrupo?: true | string }> = {
   tipo_cliente: { de: 'cad_pessoas_tipos', valor: 'id', rotulo: 'nome', busca: 'nome', filtro: 'ativo = 1', ordem: 'nome' },
   regiao: { de: 'cad_regioes', valor: 'id', rotulo: 'nome', busca: 'nome', filtro: 'ativo = 1', ordem: 'nome' },
   cidade: { de: 'cad_cidades', valor: 'id', rotulo: "CONCAT(nome, ' - ', uf)", busca: 'nome', ordem: 'nome' },
-  vendedor: { de: 'cad_pessoas', valor: 'id', rotulo: "COALESCE(NULLIF(nome_fantasia, ''), nome)", busca: 'COALESCE(NULLIF(nome_fantasia, \'\'), nome)', filtro: '(is_representante = 1 OR is_colaborador = 1) AND ativo = 1 AND date_delete IS NULL', ordem: 'nome' },
+  // Cadastro do erp-vendas, um por empresa; a lista de preço é do grupo, então valem os vendedores de todas as empresas dele
+  vendedor: {
+    de: 'cad_vendedores', valor: 'id', rotulo: 'nome', busca: "CONCAT(nome, ' ', COALESCE(apelido, ''))", filtro: 'ativo = 1', ordem: 'nome',
+    porGrupo: 'empresa_id IN (SELECT id FROM {db}.sys_empresas WHERE grupo_id = ?)',
+  },
   cliente: { de: 'cad_pessoas', valor: 'id', rotulo: "COALESCE(NULLIF(nome_fantasia, ''), nome)", busca: 'COALESCE(NULLIF(nome_fantasia, \'\'), nome)', filtro: 'is_cliente = 1 AND ativo = 1 AND date_delete IS NULL', ordem: 'nome' },
   categoria: { de: 'cad_produtos_categorias', valor: 'id', rotulo: 'nome', busca: 'nome', filtro: 'ativo = 1', ordem: 'nome', porGrupo: true },
   marca: { de: 'cad_produtos_marcas', valor: 'id', rotulo: 'descricao', busca: 'descricao', ordem: 'descricao', porGrupo: true },
@@ -104,8 +108,8 @@ export function createPrecosRouter() {
       const like = (v: string) => v.replace(/[\\%_]/g, (c) => '\\' + c);
       const palavras = texto.split(/\s+/).filter(Boolean).slice(0, 5);
   
-      // Categorias, marcas, produtos e variantes (pelo produto pai) são do grupo; tipos, regiões, cidades e pessoas são compartilhados
-      const onde: string[] = f.porGrupo ? ['grupo_id = ?'] : [];
+      // Categorias, marcas, produtos e variantes (pelo produto pai) são do grupo, vendedores das empresas do grupo; tipos, regiões, cidades e pessoas são compartilhados
+      const onde: string[] = f.porGrupo ? [f.porGrupo === true ? 'grupo_id = ?' : f.porGrupo.replace('{db}', String(dbName))] : [];
       let params: any[] = f.porGrupo ? [grupoDa(session)] : [];
       if (q.get('ids') !== null) {
         if (!ids.length) return res.json([]);
