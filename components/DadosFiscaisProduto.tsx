@@ -47,6 +47,7 @@ function gtinOk(g: string) {
 }
 
 const AVISO_COLUNA = 'Coluna ainda não criada em cad_produtos (veja extras/2026-11-09_dados_fiscais_produtos.sql)';
+const AVISO_PAF = 'Coluna ainda não criada em cad_produtos (veja extras/2026-11-20_paf_nfce.sql do erp-pdv)';
 
 export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => void }> = ({ produtoId, onVoltar }) => {
   const [carregando, setCarregando] = useState(true);
@@ -120,6 +121,8 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
 
   const grupo = useMemo(() => grupos.find((g) => String(g.id) === String(form.grupo_tributario_id ?? '')), [grupos, form.grupo_tributario_id]);
   const gtin = so(String(form.codigo_barras ?? ''), 14);
+  // Mesma regra do servidor (grupoComST): com substituição tributária o CEST é obrigatório
+  const comST = !!grupo && (['201', '202', '203', '500'].includes(grupo.csosn ?? '') || ['10', '30', '60', '70'].includes(grupo.cst_icms ?? ''));
 
   const salvar = async () => {
     setSalvando(true);
@@ -180,7 +183,8 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
       {ausentes.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
           <b>Faltam colunas em cad_produtos</b> para alguns campos desta tela ({ausentes.join(', ')}). Eles aparecem desabilitados. Rode o script{' '}
-          <span className="font-mono">extras/2026-11-09_dados_fiscais_produtos.sql</span> (ou só o bloco que precisar) para habilitá-los.
+          <span className="font-mono">extras/2026-11-09_dados_fiscais_produtos.sql</span> (ou só o bloco que precisar) para habilitá-los; IAT e IPPT vêm do{' '}
+          <span className="font-mono">extras/2026-11-20_paf_nfce.sql</span> do erp-pdv.
         </div>
       )}
 
@@ -229,11 +233,13 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
             <ComboTabela tabela="ncm" value={form.ncm} onChange={(v) => set('ncm', v)} disabled={!tem('ncm')} required />
           </Campo>
           <Campo
-            rotulo="CEST"
+            rotulo={comST ? 'CEST *' : 'CEST'}
             span={2}
             dica={
               !tem('cest')
                 ? AVISO_COLUNA
+                : comST
+                ? 'Obrigatório: o grupo tributário tem substituição tributária.'
                 : cestInfo && !cestInfo.tabela
                 ? 'Tabela fis_cest ainda não carregada (menu Tabelas › Dados Fiscais › CEST).'
                 : ncm.length === 8 && cestInfo && cestInfo.candidatos.filter((c) => !c.generico).length === 0
@@ -243,7 +249,7 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
                 : 'Obrigatório nos itens com substituição tributária. A lista já traz os CEST do NCM; digite para pesquisar os demais.'
             }
           >
-            <ComboTabela tabela="cest" value={form.cest} onChange={(v) => set('cest', v)} disabled={!tem('cest')} extra={ncm.length === 8 ? { ncm } : undefined} sugerirAoAbrir={ncm.length === 8} />
+            <ComboTabela tabela="cest" value={form.cest} onChange={(v) => set('cest', v)} disabled={!tem('cest')} required={comST} extra={ncm.length === 8 ? { ncm } : undefined} sugerirAoAbrir={ncm.length === 8} />
           </Campo>
           {campoTexto('ex_tipi', 'EX da TIPI', 3)}
           <Campo rotulo="Benefício fiscal (cBenef)" dica={dica('cbenef') ?? 'Exigido por algumas UFs.'}>
@@ -288,6 +294,18 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
                   {g.descricao}
                 </option>
               ))}
+            </select>
+          </Campo>
+          <Campo rotulo="IAT *" dica={tem('iat') ? 'PAF-NFC-e: como o PDV calcula o total do item (quantidade × preço).' : AVISO_PAF}>
+            <select value={form.iat ?? 'A'} disabled={!tem('iat')} required onChange={(e) => set('iat', e.target.value)} className={INPUT_CLASS + (tem('iat') ? '' : ' opacity-50 cursor-not-allowed')}>
+              <option value="A">A - Arredondamento</option>
+              <option value="T">T - Truncamento</option>
+            </select>
+          </Campo>
+          <Campo rotulo="IPPT *" dica={tem('ippt') ? 'PAF-NFC-e: mercadoria fabricada pela própria empresa ou por terceiros.' : AVISO_PAF}>
+            <select value={form.ippt ?? 'T'} disabled={!tem('ippt')} required onChange={(e) => set('ippt', e.target.value)} className={INPUT_CLASS + (tem('ippt') ? '' : ' opacity-50 cursor-not-allowed')}>
+              <option value="T">T - Terceiros</option>
+              <option value="P">P - Produção própria</option>
             </select>
           </Campo>
         </GradeCampos>

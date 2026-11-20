@@ -62,9 +62,15 @@ async function sessao(req: Request, res: Response) {
 const COLUNAS_FISCAIS = [
   'codigo_barras', 'ncm', 'cest', 'ex_tipi', 'cbenef', 'ind_escala', 'cnpj_fabricante', 'grupo_tributario_id',
   'servico', 'cserv_nacional', 'cserv_municipal', 'cnbs', 'aliquota_iss', 'iss_retido',
+  // PAF-NFC-e de SC (Requisito VII): colunas do script extras/2026-11-20_paf_nfce.sql do erp-pdv
+  'iat', 'ippt',
 ] as const;
 
 type Coluna = (typeof COLUNAS_FISCAIS)[number];
+
+/** ICMS por substituição tributária (CSOSN 201/202/203/500 ou CST 10/30/60/70): o CEST passa a ser obrigatório */
+export const grupoComST = (g: { csosn?: string | null; cst_icms?: string | null }) =>
+  ['201', '202', '203', '500'].includes(String(g.csosn ?? '')) || ['10', '30', '60', '70'].includes(String(g.cst_icms ?? ''));
 
 const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -151,6 +157,14 @@ function validarCampoFiscal(v: Record<string, any>, campo: Coluna): string | num
       const n = digitos(bruto);
       if (n.length !== 9) throw new Error('NBS deve ter 9 dígitos.');
       return n;
+    }
+    case 'iat': {
+      if (bruto !== 'A' && bruto !== 'T') throw new Error('Informe o IAT: A (arredondamento) ou T (truncamento).');
+      return bruto;
+    }
+    case 'ippt': {
+      if (bruto !== 'P' && bruto !== 'T') throw new Error('Informe o IPPT: P (produção própria) ou T (terceiros).');
+      return bruto;
     }
     case 'aliquota_iss': {
       if (vazio) return null;
@@ -939,8 +953,13 @@ export function createProdutosRouter() {
         return res.status(400).json({ error: 'Escala não relevante (N): informe o CNPJ do fabricante.' });
       }
       if (final.grupo_tributario_id) {
-        const [g]: any = await db.execute(`SELECT id FROM ${dbName}.fis_grupos_tributarios WHERE id = ? AND ativo = 1`, [final.grupo_tributario_id]);
+        const [g]: any = await db.execute(`SELECT id, csosn, cst_icms FROM ${dbName}.fis_grupos_tributarios WHERE id = ? AND ativo = 1`, [final.grupo_tributario_id]);
         if (!g.length) return res.status(400).json({ error: 'Grupo tributário inexistente ou inativo.' });
+        // CEST obrigatório só com ICMS por substituição tributária (e então exigido pelo PAF-NFC-e, Requisito VII)
+        if (existentes.has('cest') && grupoComST(g[0])) {
+          const cest = 'cest' in final ? final.cest : ((await db.execute(`SELECT cest FROM ${dbName}.cad_produtos WHERE id = ?`, [id])) as any)[0][0]?.cest;
+          if (!cest) return res.status(400).json({ error: 'Grupo tributário com substituição tributária: informe o CEST.' });
+        }
       }
       if (final.cserv_nacional) {
         const [s]: any = await db.execute(`SELECT id FROM ${dbName}.nfs_servicos_nacionais WHERE codigo = ?`, [final.cserv_nacional]);

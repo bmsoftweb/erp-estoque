@@ -2,6 +2,13 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.6 — 2026-11-20
+
+- Dados fiscais do produto, para o PAF-NFC-e de SC (Requisito VII):
+  - campos IAT (arredondamento ou truncamento) e IPPT (produção própria ou terceiros), das colunas do script `extras/2026-11-20_paf_nfce.sql` do erp-pdv;
+  - CEST obrigatório quando o grupo tributário tem substituição tributária (CSOSN 201, 202, 203 ou 500; CST 10, 30, 60 ou 70), na tela e na gravação.
+  - Teste: `npx tsx --env-file=.env server/produtos.check.ts`.
+
 ## 0.1.5 — 2026-11-19
 
 - Nova tela Dados Fiscais (menu Tabelas), com uma aba por tabela:
