@@ -31,14 +31,16 @@ export function createCategoriasRouter() {
       const session = await getIronSession<SessionData>(req, res, sessionOptions);
       if (!session.isLoggedIn) return res.status(401).json({ error: 'Não autorizado' });
       const { nome, descricao, categoria_pai, ativo } = req.body;
+      // Pesquisa por categoria do PDV (código 77): extras/2026-11-21_categorias_pdv_pesquisa.sql do erp-pdv
+      const pdv_pesquisa = req.body.pdv_pesquisa ? 1 : 0;
       if (!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
       const db = await getDb();
       const dbName = session.dbConfig?.database;
       const emp = grupoDa(session);
       if (categoria_pai && !(await ehDoGrupo(db, dbName, 'cad_produtos_categorias', categoria_pai, emp))) return res.status(400).json({ error: 'Categoria pai não encontrada.' });
       const [result]: any = await db.execute(
-        `INSERT INTO ${dbName}.cad_produtos_categorias (grupo_id, nome, descricao, categoria_pai, ativo) VALUES (?, ?, ?, ?, ?)`,
-        [emp, nome, descricao, categoria_pai || null, ativo]
+        `INSERT INTO ${dbName}.cad_produtos_categorias (grupo_id, nome, descricao, categoria_pai, pdv_pesquisa, ativo) VALUES (?, ?, ?, ?, ?, ?)`,
+        [emp, nome, descricao, categoria_pai || null, pdv_pesquisa, ativo]
       );
       return res.json({ id: result.insertId, nome, descricao, categoria_pai, ativo });
     } catch (error: any) {
@@ -52,13 +54,15 @@ export function createCategoriasRouter() {
       if (!session.isLoggedIn) return res.status(401).json({ error: 'Não autorizado' });
       const { id } = req.params;
       const { nome, descricao, categoria_pai, ativo } = req.body;
+      // Pesquisa por categoria do PDV (código 77): extras/2026-11-21_categorias_pdv_pesquisa.sql do erp-pdv
+      const pdv_pesquisa = req.body.pdv_pesquisa ? 1 : 0;
       const db = await getDb();
       const dbName = session.dbConfig?.database;
       const emp = grupoDa(session);
       if (categoria_pai && !(await ehDoGrupo(db, dbName, 'cad_produtos_categorias', categoria_pai, emp))) return res.status(400).json({ error: 'Categoria pai não encontrada.' });
       const [r]: any = await db.execute(
-        `UPDATE ${dbName}.cad_produtos_categorias SET nome = ?, descricao = ?, categoria_pai = ?, ativo = ? WHERE id = ? AND grupo_id = ?`,
-        [nome, descricao, categoria_pai || null, ativo, id, emp]
+        `UPDATE ${dbName}.cad_produtos_categorias SET nome = ?, descricao = ?, categoria_pai = ?, pdv_pesquisa = ?, ativo = ? WHERE id = ? AND grupo_id = ?`,
+        [nome, descricao, categoria_pai || null, pdv_pesquisa, ativo, id, emp]
       );
       if (!r.affectedRows) return res.status(404).json({ error: 'Categoria não encontrada.' });
       return res.json({ id, nome, descricao, categoria_pai, ativo });

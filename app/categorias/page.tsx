@@ -20,12 +20,15 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AbasCrm } from '@/components/TelaHeader';
 import { FormCrm, Campo, INPUT_CLASS } from '@/components/FormCrm';
 import { BotaoAcao } from '@/components/MenuAcoes';
+import { Toggle } from '@/components/Toggle';
 
 interface Categoria {
   id: number;
   nome: string;
   descricao: string | null;
   categoria_pai: number | null;
+  /** 1 = aparece na pesquisa por categoria do PDV (código 77: hortifrúti, padaria…) */
+  pdv_pesquisa?: number;
   ativo: number;
   children_count: number;
   date_insert: string;
@@ -50,6 +53,7 @@ export default function CategoriasPage() {
     nome: '',
     descricao: '',
     categoria_pai: '' as string | number,
+    pdv_pesquisa: 0,
     ativo: 1
   });
 
@@ -143,6 +147,7 @@ export default function CategoriasPage() {
         nome: categoria.nome,
         descricao: categoria.descricao || '',
         categoria_pai: categoria.categoria_pai || '',
+        pdv_pesquisa: Number(categoria.pdv_pesquisa) || 0,
         ativo: categoria.ativo
       });
     } else {
@@ -151,6 +156,7 @@ export default function CategoriasPage() {
         nome: '',
         descricao: '',
         categoria_pai: '',
+        pdv_pesquisa: 0,
         ativo: 1
       });
     }
@@ -299,6 +305,7 @@ export default function CategoriasPage() {
                 { key: 'nome', label: 'Nome', largura: 320, render: (r: any) => celulaArvore(r, r.nome) },
                 { key: 'descricao', label: 'Descrição', largura: 300, render: (r: any) => r.descricao || '-' },
                 { key: 'categoria_pai', label: 'Pai', alinhar: 'numero', largura: 100, render: (r: any) => (r.categoria_pai ? formatNumber(r.categoria_pai, 0) : '-') },
+                { key: 'pdv_pesquisa', label: 'Pesquisa no PDV', alinhar: 'centro', largura: 130, render: (r: any) => (Number(r.pdv_pesquisa) ? 'Sim' : 'Não') },
                 { key: 'ativo', label: 'Ativo', alinhar: 'centro', largura: 80, render: (r: any) => <span className={`${r.ativo ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} font-medium`}>{r.ativo ? 'Sim' : 'Não'}</span> },
               ]}
               acoes={(r: any) => (
@@ -344,6 +351,11 @@ export default function CategoriasPage() {
                                 <option value="">Nenhuma (Raiz)</option>
                                 {renderCategoryOptions()}
                               </select>
+              </Campo>
+              <Campo rotulo="Pesquisa no PDV" span={2} dica="Aparece na pesquisa por categoria do caixa (código 77), com os produtos dela e das subcategorias. Para produtos pesados no caixa ou sem código de barras (hortifrúti, padaria…).">
+                <div className="h-[34px] flex items-center">
+                  <Toggle checked={!!formData.pdv_pesquisa} onChange={(v) => setFormData({ ...formData, pdv_pesquisa: v ? 1 : 0 })} />
+                </div>
               </Campo>
             </FormCrm>
           )}

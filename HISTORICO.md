@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.7 — 2026-11-21
+
+- Categorias: chave "Pesquisa no PDV" (`pdv_pesquisa`), que põe a categoria e as subcategorias na pesquisa por categoria do caixa (código 77).
+
 ## 0.1.6 — 2026-11-20
 
 - Dados fiscais do produto, para o PAF-NFC-e de SC (Requisito VII):
