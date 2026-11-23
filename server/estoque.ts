@@ -128,7 +128,8 @@ export async function aplicarNoSaldo(conn: any, bd: string, itens: { m: Moviment
       reservado: Math.round((atual.reservado + d.reservado) * 10000) / 10000,
     };
     if (novo.reservado < 0) throw new Invalido(`Não há tanta quantidade reservada na localização ${d.loc}.`);
-    if (novo.quantidade - novo.reservado < 0) {
+    // Só barra o que diminui o disponível: as vendas do PAF deixam o saldo negativo e a entrada que repõe tem de passar
+    if (novo.quantidade - novo.reservado < 0 && d.quantidade - d.reservado < 0) {
       const disp = atual.quantidade - atual.reservado;
       throw new Invalido(`Saldo insuficiente na localização ${d.loc}: disponível ${disp.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}.`);
     }

@@ -91,22 +91,22 @@ export function gruposPadrao(tipo: TipoEmpresa): Record<string, any>[] {
   const st = { cfop_dentro_uf: '5405', cfop_fora_uf: '6404' };
   const cesta = { cclass_trib: '200003' };
   const nome = TIPOS_EMPRESA.find(([t]) => t === tipo)![1];
+  const icms = { cst_icms: '00', aliquota_icms: 17 };
 
   if (tipo === 'simples') {
     const pc = { cst_pis: '49', aliquota_pis: 0, cst_cofins: '49', aliquota_cofins: 0 };
     return [
-      { descricao: 'Revenda tributada', csosn: '102' },
-      { descricao: 'Produção própria', csosn: '102', ...producao },
-      { descricao: 'Revenda isenta', csosn: '400' },
-      { descricao: 'Revenda com ST', csosn: '500', ...st },
-      { descricao: 'Cesta básica', csosn: '102', ...cesta },
+      { descricao: 'Revenda tributada', csosn: '102', ...icms },
+      { descricao: 'Produção própria', csosn: '102', ...icms, ...producao },
+      { descricao: 'Revenda isenta', csosn: '400', cst_icms: '40' },
+      { descricao: 'Revenda com ST', csosn: '500', cst_icms: '60', ...st },
+      { descricao: 'Cesta básica', csosn: '102', ...icms, aliquota_icms: 7, ...cesta },
     ].map((g) => ({ ...base, ...pc, ...g, descricao: `${g.descricao} (${nome})` }));
   }
 
   const [pis, cofins] = tipo === 'presumido' ? [0.65, 3] : [1.65, 7.6];
   const pc = { cst_pis: '01', aliquota_pis: pis, cst_cofins: '01', aliquota_cofins: cofins };
   const zero = (cst: string) => ({ cst_pis: cst, aliquota_pis: 0, cst_cofins: cst, aliquota_cofins: 0 });
-  const icms = { cst_icms: '00', aliquota_icms: 17 };
   return [
     { descricao: 'Revenda tributada', ...icms },
     { descricao: 'Produção própria', ...icms, ...producao },
@@ -129,7 +129,8 @@ export function errosGrupo(g: Record<string, any>): string[] {
   if (!/^[0-8]$/.test(s('origem'))) erros.push('Origem da mercadoria: de 0 a 8.');
   if (s('cfop_dentro_uf') && !/^5\d{3}$/.test(s('cfop_dentro_uf'))) erros.push('CFOP dentro da UF: 4 dígitos começando por 5.');
   if (s('cfop_fora_uf') && !/^6\d{3}$/.test(s('cfop_fora_uf'))) erros.push('CFOP para outra UF: 4 dígitos começando por 6.');
-  if (!s('csosn') && !s('cst_icms')) erros.push('Informe o CSOSN (Simples Nacional) ou o CST do ICMS (regime normal).');
+  // PAF-NFC-e (Ato DIAT 54/2026, P2/D5): CST e alíquota legal também no Simples, junto do CSOSN (a nota usa o CSOSN)
+  if (!s('cst_icms')) erros.push('Informe o CST do ICMS (no Simples Nacional também, junto do CSOSN: vai para o PAF-NFC-e).');
   if (s('csosn') && !codigos(CSOSN).includes(s('csosn'))) erros.push(`CSOSN aceitos: ${codigos(CSOSN).join(', ')}.`);
   if (s('csosn') === '101' && !(num(g.aliquota_credito_sn) > 0)) erros.push('CSOSN 101: informe a alíquota de crédito do Simples.');
   if (s('cst_icms') && !codigos(CST_ICMS).includes(s('cst_icms'))) erros.push(`CST do ICMS aceitos: ${codigos(CST_ICMS).join(', ')}.`);
@@ -140,6 +141,10 @@ export function errosGrupo(g: Record<string, any>): string[] {
     erros.push(...fora0a100(aliq, `Alíquota ${nome}`));
   }
   erros.push(...fora0a100(num(g.aliquota_credito_sn), 'Alíquota de crédito do Simples'), ...fora0a100(num(g.aliquota_icms), 'Alíquota do ICMS'));
-  if (s('cclass_trib') && !/^\d{6}$/.test(s('cclass_trib'))) erros.push('cClassTrib: 6 dígitos.');
+  // PAF-NFC-e (Req. VII, VII e § 4º): sem cClassTrib o CST do IBS/CBS não sai (o CST é derivado dele ao gravar)
+  if (!/^\d{6}$/.test(s('cclass_trib'))) erros.push('Informe a classificação tributária do IBS/CBS (cClassTrib, 6 dígitos): o PAF-NFC-e exige o CST e a classificação tributária.');
+  if (s('cst_is') && !/^\d{3}$/.test(s('cst_is'))) erros.push('CST do Imposto Seletivo: 3 dígitos.');
+  if (s('cst_is') && !/^\d{6}$/.test(s('cclass_trib_is'))) erros.push('Imposto Seletivo: informe o cClassTribIS (6 dígitos).');
+  erros.push(...fora0a100(num(g.aliquota_is), 'Alíquota do Imposto Seletivo'));
   return erros;
 }

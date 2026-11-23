@@ -123,6 +123,8 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
   const gtin = so(String(form.codigo_barras ?? ''), 14);
   // Mesma regra do servidor (grupoComST): com substituição tributária o CEST é obrigatório
   const comST = !!grupo && (['201', '202', '203', '500'].includes(grupo.csosn ?? '') || ['10', '30', '60', '70'].includes(grupo.cst_icms ?? ''));
+  // PAF-NFC-e (Requisito VII): toda mercadoria tem CEST; no serviço, só com substituição tributária
+  const cestObrigatorio = comST || !form.servico;
 
   const salvar = async () => {
     setSalvando(true);
@@ -191,8 +193,8 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
 
       <SecaoCrm titulo="Identificação na nota">
         <GradeCampos>
-          <Campo rotulo="Código interno (cProd)">
-            <input type="text" value={produto?.sku ?? ''} disabled className={INPUT_CLASS + ' font-mono opacity-60'} />
+          <Campo rotulo="Código interno (cProd)" dica="No PAF-NFC-e o código do item é o GTIN; sem ele, o código (id) do produto.">
+            <input type="text" value={gtin || (produto?.id ?? '')} disabled className={INPUT_CLASS + ' font-mono opacity-60'} />
           </Campo>
           <Campo rotulo="Unidade comercial (uCom)">
             <input type="text" value={produto?.unidade_sigla ?? ''} disabled className={INPUT_CLASS + ' opacity-60'} />
@@ -233,7 +235,7 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
             <ComboTabela tabela="ncm" value={form.ncm} onChange={(v) => set('ncm', v)} disabled={!tem('ncm')} required />
           </Campo>
           <Campo
-            rotulo={comST ? 'CEST *' : 'CEST'}
+            rotulo={cestObrigatorio ? 'CEST *' : 'CEST'}
             span={2}
             dica={
               !tem('cest')
@@ -244,12 +246,12 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
                 ? 'Tabela fis_cest ainda não carregada (menu Tabelas › Dados Fiscais › CEST).'
                 : ncm.length === 8 && cestInfo && cestInfo.candidatos.filter((c) => !c.generico).length === 0
                 ? cestInfo.candidatos.length
-                  ? 'Sem CEST específico para este NCM no Conv. ICMS 142/18 (há só itens genéricos por capítulo, que costumam não se aplicar): informe só se o seu cadastro tiver um.'
-                  : 'Nenhum CEST do Conv. ICMS 142/18 para este NCM: informe só se o seu cadastro tiver um.'
-                : 'Obrigatório nos itens com substituição tributária. A lista já traz os CEST do NCM; digite para pesquisar os demais.'
+                  ? 'Sem CEST específico para este NCM no Conv. ICMS 142/18 (há só itens genéricos por capítulo).'
+                  : 'Nenhum CEST do Conv. ICMS 142/18 para este NCM.'
+                : (cestObrigatorio ? 'Obrigatório na mercadoria (PAF-NFC-e). ' : 'Obrigatório nos itens com substituição tributária. ') + 'A lista já traz os CEST do NCM; digite para pesquisar os demais.'
             }
           >
-            <ComboTabela tabela="cest" value={form.cest} onChange={(v) => set('cest', v)} disabled={!tem('cest')} required={comST} extra={ncm.length === 8 ? { ncm } : undefined} sugerirAoAbrir={ncm.length === 8} />
+            <ComboTabela tabela="cest" value={form.cest} onChange={(v) => set('cest', v)} disabled={!tem('cest')} required={cestObrigatorio} extra={ncm.length === 8 ? { ncm } : undefined} sugerirAoAbrir={ncm.length === 8} />
           </Campo>
           {campoTexto('ex_tipi', 'EX da TIPI', 3)}
           <Campo rotulo="Benefício fiscal (cBenef)" dica={dica('cbenef') ?? 'Exigido por algumas UFs.'}>
@@ -283,12 +285,13 @@ export const DadosFiscaisProduto: React.FC<{ produtoId: number; onVoltar: () => 
         <GradeCampos>
           <Campo rotulo="Grupo tributário" span={2} dica="Origem, CFOP, ICMS/CSOSN, PIS, COFINS e IBS/CBS vêm do grupo (cadastro fis_grupos_tributarios).">
             <select
+              required
               value={form.grupo_tributario_id ?? ''}
               disabled={!tem('grupo_tributario_id')}
               onChange={(e) => set('grupo_tributario_id', e.target.value ? Number(e.target.value) : null)}
               className={INPUT_CLASS}
             >
-              <option value="">Sem grupo (usa o padrão da emissão)</option>
+              <option value="">Escolha… (obrigatório, também no serviço)</option>
               {grupos.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.descricao}

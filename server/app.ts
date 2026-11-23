@@ -11,7 +11,6 @@ import { createMarcasRouter } from './marcas.js';
 import { createMovimentoRouter } from './movimento.js';
 import { createPrecosRouter } from './precos.js';
 import { createProdutosRouter } from './produtos.js';
-import { createProdutosV2Router } from './produtosV2.js';
 import { createStatsRouter } from './stats.js';
 import { createTabelasFiscaisRouter } from './tabelasFiscais.js';
 import { createUnidadesRouter } from './unidades.js';
@@ -37,7 +36,6 @@ export function createApp() {
   app.use('/api', createMovimentoRouter());
   app.use('/api', createPrecosRouter());
   app.use('/api', createProdutosRouter());
-  app.use('/api', createProdutosV2Router());
   app.use('/api', createStatsRouter());
   app.use('/api', createTabelasFiscaisRouter());
   app.use('/api', createUnidadesRouter());

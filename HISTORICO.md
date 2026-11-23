@@ -2,6 +2,13 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.8 — 2026-11-23
+
+- PAF-NFC-e (Requisito VII): grupo tributário exige CST do ICMS (também no Simples) e cClassTrib; mercadoria e serviço só com grupo completo; preço de venda e unidade obrigatórios; variantes com preço e GTIN válidos; aviso e lista dos produtos com tributação incompleta (sem eles o Arquivo I do PAF não é gerado); Dados fiscais mostram o cProd real (GTIN ou id).
+- Vendas do PAF podem deixar o saldo negativo (script `extras/2026-11-23_saldo_negativo.sql`); a entrada que repõe passa.
+- Listas de preço: critério "Clube de descontos", usado pelo PDV.
+- Aviso "MENU FISCAL INACESSÍVEL NESTA TELA" em todas as telas; sai a rota antiga de produtos (produtosV2).
+
 ## 0.1.7 — 2026-11-21
 
 - Categorias: chave "Pesquisa no PDV" (`pdv_pesquisa`), que põe a categoria e as subcategorias na pesquisa por categoria do caixa (código 77).

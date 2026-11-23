@@ -8,7 +8,7 @@ import { Router, Request, Response } from 'express';
 import { getIronSession } from 'iron-session';
 import { sessionOptions, SessionData } from './session.js';
 import { getDb } from './db.js';
-import { empresaDa } from './empresa.js';
+import { empresaDa, grupoDa } from './empresa.js';
 import { errosGrupo, gruposPadrao, TIPOS_EMPRESA, type TipoEmpresa } from '../lib/tributacao.js';
 
 const dma = (c: string) => `DATE_FORMAT(${c}, '%d/%m/%Y') AS ${c}`;
@@ -114,15 +114,16 @@ export function createTabelasFiscaisRouter() {
     }
   });
 
-  // Grupos tributários (fis_grupos_tributarios, que o erp-vendas usa na nota): todos, inclusive os inativos
+  // Grupos tributários (fis_grupos_tributarios, que o erp-vendas usa na nota): os do grupo de empresas, inclusive os inativos
   router.get('/grupos-tributarios', async (req, res) => {
     try {
       const s = await sessao(req, res);
       if (!s) return;
       const [rows]: any = await (await getDb()).query(
         `SELECT id, descricao, origem, cfop_dentro_uf, cfop_fora_uf, csosn, aliquota_credito_sn, cst_icms, aliquota_icms,
-                cst_pis, aliquota_pis, cst_cofins, aliquota_cofins, cst_ibscbs, cclass_trib, ativo
-           FROM ${s.dbConfig?.database}.fis_grupos_tributarios ORDER BY descricao`,
+                cst_pis, aliquota_pis, cst_cofins, aliquota_cofins, cst_ibscbs, cclass_trib, cst_is, cclass_trib_is, aliquota_is, ativo
+           FROM ${s.dbConfig?.database}.fis_grupos_tributarios WHERE grupo_id = ? ORDER BY descricao`,
+        [grupoDa(s)],
       );
       res.json(rows);
     } catch (e: any) {
@@ -153,6 +154,10 @@ export function createTabelasFiscaisRouter() {
         cst_cofins: dig(b.cst_cofins),
         aliquota_cofins: Number(b.aliquota_cofins) || 0,
         cclass_trib: dig(b.cclass_trib),
+        // Imposto Seletivo (extras/2026-11-23_imposto_seletivo.sql): sem CST, o grupo fica fora do IS
+        cst_is: dig(b.cst_is),
+        cclass_trib_is: dig(b.cst_is) && dig(b.cclass_trib_is),
+        aliquota_is: dig(b.cst_is) ? Number(b.aliquota_is) || 0 : 0,
         ativo: b.ativo === undefined || b.ativo ? 1 : 0,
       };
       const erros = errosGrupo(g);
@@ -170,10 +175,10 @@ export function createTabelasFiscaisRouter() {
       const ag = await agora();
       const cols = Object.keys(g);
       if (id === null) {
-        const [r]: any = await db.query(`INSERT INTO ${bd}.fis_grupos_tributarios (${cols.join(', ')}, criado_em, atualizado_em) VALUES (?)`, [[...cols.map((c) => g[c]), ag, ag]]);
+        const [r]: any = await db.query(`INSERT INTO ${bd}.fis_grupos_tributarios (${cols.join(', ')}, grupo_id, criado_em, atualizado_em) VALUES (?)`, [[...cols.map((c) => g[c]), grupoDa(s), ag, ag]]);
         return res.json({ id: r.insertId });
       }
-      const [r]: any = await db.query(`UPDATE ${bd}.fis_grupos_tributarios SET ${cols.map((c) => c + ' = ?').join(', ')}, atualizado_em = ? WHERE id = ?`, [...cols.map((c) => g[c]), ag, id]);
+      const [r]: any = await db.query(`UPDATE ${bd}.fis_grupos_tributarios SET ${cols.map((c) => c + ' = ?').join(', ')}, atualizado_em = ? WHERE id = ? AND grupo_id = ?`, [...cols.map((c) => g[c]), ag, id, grupoDa(s)]);
       if (!r.affectedRows) return res.status(404).json({ error: 'Grupo tributário não encontrado.' });
       res.json({ id });
     } catch (e: any) {
@@ -192,7 +197,7 @@ export function createTabelasFiscaisRouter() {
       if (!TIPOS_EMPRESA.some(([t]) => t === tipo)) return res.status(400).json({ error: 'Escolha o tipo da empresa.' });
       const bd = s.dbConfig?.database;
       const db = await getDb();
-      const [existentes]: any = await db.query(`SELECT descricao FROM ${bd}.fis_grupos_tributarios`);
+      const [existentes]: any = await db.query(`SELECT descricao FROM ${bd}.fis_grupos_tributarios WHERE grupo_id = ?`, [grupoDa(s)]);
       const ja = new Set(existentes.map((r: any) => String(r.descricao).trim().toLowerCase()));
       const novos = gruposPadrao(tipo).filter((g) => !ja.has(g.descricao.toLowerCase()));
       if (!novos.length) return res.json({ incluidos: 0 });
@@ -207,8 +212,8 @@ export function createTabelasFiscaisRouter() {
       const ag = await agora();
       const cols = [...new Set(novos.flatMap((g) => Object.keys(g)))];
       await db.query(
-        `INSERT INTO ${bd}.fis_grupos_tributarios (${cols.join(', ')}, cst_ibscbs, ativo, criado_em, atualizado_em) VALUES ?`,
-        [novos.map((g) => [...cols.map((c) => g[c] ?? null), cst.get(g.cclass_trib), 1, ag, ag])],
+        `INSERT INTO ${bd}.fis_grupos_tributarios (${cols.join(', ')}, cst_ibscbs, grupo_id, ativo, criado_em, atualizado_em) VALUES ?`,
+        [novos.map((g) => [...cols.map((c) => g[c] ?? null), cst.get(g.cclass_trib), grupoDa(s), 1, ag, ag])],
       );
       res.json({ incluidos: novos.length });
     } catch (e: any) {

@@ -13,8 +13,9 @@
  * Dinheiro em 2 casas, arredondado em centavos.
  */
 
-export type CampoCriterio = 'tipo_cliente' | 'cidade' | 'uf' | 'regiao' | 'vendedor' | 'cliente' | 'canal';
-export const CAMPOS_CRITERIO: CampoCriterio[] = ['tipo_cliente', 'cidade', 'uf', 'regiao', 'vendedor', 'cliente', 'canal'];
+/** clube = '1': só para o associado do clube de descontos (cad_pessoas.clube_desconto), usado pelo PDV */
+export type CampoCriterio = 'tipo_cliente' | 'cidade' | 'uf' | 'regiao' | 'vendedor' | 'cliente' | 'canal' | 'clube';
+export const CAMPOS_CRITERIO: CampoCriterio[] = ['tipo_cliente', 'cidade', 'uf', 'regiao', 'vendedor', 'cliente', 'canal', 'clube'];
 
 export interface ItemRegra {
   escopo: 'variante' | 'produto' | 'marca' | 'categoria';
@@ -57,6 +58,8 @@ export interface ContextoVenda {
   vendedor?: string | number | null;
   cliente?: string | number | null;
   canal?: string | null;
+  /** '1' = associado do clube de descontos */
+  clube?: string | null;
 }
 
 export interface ProdutoPreco {

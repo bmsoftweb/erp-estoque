@@ -168,6 +168,7 @@ export function createPrecosRouter() {
         base.uf = p[0].cidade_uf ?? null;
         base.regiao = p[0].regiao_id ?? null;
         if (base.vendedor == null) base.vendedor = p[0].vendedor_id ?? null;
+        base.clube = Number(p[0].clube_desconto) === 1 ? '1' : null; // coluna do SQL do clube (erp-pdv): pode não existir ainda
       }
   
       // Listas (tabelas criadas pelo usuário; ausentes = só preço base)

@@ -21,7 +21,7 @@ type Grupo = Record<string, any>;
 
 const VAZIO: Grupo = {
   descricao: '', origem: '0', cfop_dentro_uf: null, cfop_fora_uf: null, csosn: '', aliquota_credito_sn: '', cst_icms: '', aliquota_icms: '',
-  cst_pis: '', aliquota_pis: '', cst_cofins: '', aliquota_cofins: '', cclass_trib: null, ativo: 1,
+  cst_pis: '', aliquota_pis: '', cst_cofins: '', aliquota_cofins: '', cclass_trib: null, cst_is: '', cclass_trib_is: '', aliquota_is: '', ativo: 1,
 };
 
 const nome = (lista: Opcao[], c: string | null) => (c ? lista.find(([k]) => k === c)?.[1] ?? '' : '');
@@ -120,16 +120,16 @@ export const GruposTributarios: React.FC = () => {
         <Campo rotulo="CFOP para outra UF" span={2} dica="Vazio = o da configuração da NF-e.">
           <ComboTabela tabela="cfop" value={form.cfop_fora_uf} onChange={(v) => set('cfop_fora_uf', v)} extra={{ inicio: '6' }} sugerirAoAbrir />
         </Campo>
-        <Campo rotulo="CSOSN" span={3} dica="Simples Nacional. Informe o CSOSN, o CST do ICMS ou os dois.">
+        <Campo rotulo="CSOSN" span={3} dica="Só no Simples Nacional (o CST do ICMS é sempre obrigatório).">
           <Selecao valor={form.csosn} onChange={(v) => set('csosn', v)} opcoes={CSOSN} vazio="Não informar" />
         </Campo>
         <Campo rotulo="Alíquota de crédito do Simples (%)" dica="Só no CSOSN 101.">
           <NumberField value={form.aliquota_credito_sn} onChange={(v) => set('aliquota_credito_sn', v)} scale={2} className={INPUT_CLASS} />
         </Campo>
-        <Campo rotulo="CST do ICMS" span={3} dica="Regime normal.">
-          <Selecao valor={form.cst_icms} onChange={(v) => set('cst_icms', v)} opcoes={CST_ICMS} vazio="Não informar" />
+        <Campo rotulo="CST do ICMS" span={3} dica="Também no Simples Nacional: a nota usa o CSOSN e o PAF-NFC-e usa este CST.">
+          <Selecao valor={form.cst_icms} onChange={(v) => set('cst_icms', v)} opcoes={CST_ICMS} vazio="Selecione…" required />
         </Campo>
-        <Campo rotulo="Alíquota do ICMS (%)" dica="Só no CST 00.">
+        <Campo rotulo="Alíquota do ICMS (%)" dica="Alíquota legal, também no Simples (PAF-NFC-e). Obrigatória no CST 00.">
           <NumberField value={form.aliquota_icms} onChange={(v) => set('aliquota_icms', v)} scale={2} className={INPUT_CLASS} />
         </Campo>
         <Campo rotulo="CST do PIS" span={3}>
@@ -144,8 +144,17 @@ export const GruposTributarios: React.FC = () => {
         <Campo rotulo="Alíquota da COFINS (%)">
           <NumberField value={form.aliquota_cofins} onChange={(v) => set('aliquota_cofins', v)} scale={2} className={INPUT_CLASS} />
         </Campo>
-        <Campo rotulo="Classificação tributária do IBS/CBS (cClassTrib)" span={4} dica="Vazio = a da configuração da NF-e. O CST do IBS/CBS sai da classificação ao gravar.">
-          <ComboTabela tabela="cclass" value={form.cclass_trib} onChange={(v) => set('cclass_trib', v)} sugerirAoAbrir />
+        <Campo rotulo="Classificação tributária do IBS/CBS (cClassTrib)" span={4} dica="Obrigatória (PAF-NFC-e). O CST do IBS/CBS sai da classificação ao gravar.">
+          <ComboTabela tabela="cclass" value={form.cclass_trib} onChange={(v) => set('cclass_trib', v)} sugerirAoAbrir required />
+        </Campo>
+        <Campo rotulo="CST do Imposto Seletivo" dica="Vazio = fora do IS. Só os produtos do Anexo I da NT 2025.002 (cobrança a partir de 2027).">
+          <input inputMode="numeric" maxLength={3} value={form.cst_is ?? ''} onChange={(e) => set('cst_is', e.target.value.replace(/\D/g, ''))} onFocus={(e) => e.target.select()} className={INPUT_CLASS + ' font-mono'} />
+        </Campo>
+        <Campo rotulo="cClassTribIS">
+          <input inputMode="numeric" maxLength={6} required={!!form.cst_is} disabled={!form.cst_is} value={form.cst_is ? form.cclass_trib_is ?? '' : ''} onChange={(e) => set('cclass_trib_is', e.target.value.replace(/\D/g, ''))} onFocus={(e) => e.target.select()} className={INPUT_CLASS + ' font-mono'} />
+        </Campo>
+        <Campo rotulo="Alíquota do IS (%)" dica="Alíquota percentual (pIS) sobre o valor do item.">
+          <NumberField value={form.cst_is ? form.aliquota_is : ''} onChange={(v) => set('aliquota_is', v)} scale={2} disabled={!form.cst_is} className={INPUT_CLASS} />
         </Campo>
         <Campo rotulo="Ativo">
           <Toggle checked={Boolean(Number(form.ativo))} onChange={(v) => set('ativo', v ? 1 : 0)} />

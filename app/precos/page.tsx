@@ -18,7 +18,7 @@ import { formatNumber } from '@/lib/utils';
 
 const UFS: Opcao[] = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ').map((u) => ({ valor: u, rotulo: u }));
 const CANAIS: Opcao[] = ['Balcão', 'Representante', 'Telefone', 'E-commerce'].map((c) => ({ valor: c, rotulo: c }));
-const ROTULO_CRITERIO: Record<string, string> = { tipo_cliente: 'Tipo', cidade: 'Cidade', uf: 'UF', regiao: 'Região', vendedor: 'Vendedor', cliente: 'Cliente', canal: 'Canal' };
+const ROTULO_CRITERIO: Record<string, string> = { tipo_cliente: 'Tipo', cidade: 'Cidade', uf: 'UF', regiao: 'Região', vendedor: 'Vendedor', cliente: 'Cliente', canal: 'Canal', clube: 'Clube' };
 
 interface ItemForm {
   escopo: 'variante' | 'produto' | 'marca' | 'categoria';
@@ -70,7 +70,7 @@ const paraCorpo = (f: FormLista) => ({
 const br = (iso?: string | null) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
 
 function resumoCriterios(l: any): string {
-  const partes = Object.entries(l.criterios ?? {}).map(([k, v]) => `${ROTULO_CRITERIO[k] ?? k}: ${v}`);
+  const partes = Object.entries(l.criterios ?? {}).map(([k, v]) => (k === 'clube' ? 'Clube de descontos' : `${ROTULO_CRITERIO[k] ?? k}: ${v}`));
   if (l.qtdMin != null || l.qtdMax != null) partes.push('Qtd ' + (l.qtdMin != null ? '≥ ' + formatNumber(l.qtdMin, 0) : '') + (l.qtdMax != null ? ' ≤ ' + formatNumber(l.qtdMax, 0) : ''));
   return partes.join(' · ') || 'Qualquer venda';
 }
@@ -271,6 +271,11 @@ export default function PrecosPage() {
                   </Campo>
                   <Campo rotulo="Canal de venda" span={2} dica="Escolha ou digite um canal e tecle Enter.">
                     <SelecaoMultipla livre value={form.criterios.canal ?? []} onChange={(v) => setCrit('canal', v)} placeholder={'Ex.: ' + CANAIS.map((c) => c.rotulo).join(', ') + '…'} />
+                  </Campo>
+                  <Campo rotulo="Clube de descontos" span={2} dica="Só para o associado do clube (marca no cadastro do cliente): o PDV aplica esta lista quando o CPF da venda é de um associado.">
+                    <div className="h-[34px] flex items-center">
+                      <Toggle checked={!!form.criterios.clube?.length} onChange={(v) => setCrit('clube', v ? ['1'] : [])} />
+                    </div>
                   </Campo>
                 </GradeCampos>
               </SecaoCrm>

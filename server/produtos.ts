@@ -72,6 +72,21 @@ type Coluna = (typeof COLUNAS_FISCAIS)[number];
 export const grupoComST = (g: { csosn?: string | null; cst_icms?: string | null }) =>
   ['201', '202', '203', '500'].includes(String(g.csosn ?? '')) || ['10', '30', '60', '70'].includes(String(g.cst_icms ?? ''));
 
+/** PAF-NFC-e (Req. VII, VII e § 4º; Arquivo I, P2): o que falta no grupo (CST do ICMS de 2 dígitos, também no Simples, e CST/cClassTrib do IBS/CBS) */
+export const pendenciasGrupo = (g: { cst_icms?: string | null; cst_ibscbs?: string | null; cclass_trib?: string | null }) => [
+  ...(/^\d{2}$/.test(String(g.cst_icms ?? '')) ? [] : ['o CST do ICMS']),
+  ...(g.cst_ibscbs ? [] : ['o CST do IBS/CBS']),
+  ...(g.cclass_trib ? [] : ['a classificação tributária do IBS/CBS (cClassTrib)']),
+];
+
+/** Mercadoria ou serviço só com grupo completo (pendenciasGrupo); devolve a mensagem de erro ou null */
+export const faltaNoGrupo = (g: { descricao?: string; cst_icms?: string | null; cst_ibscbs?: string | null; cclass_trib?: string | null }) => {
+  const falta = pendenciasGrupo(g);
+  return falta.length
+    ? `Grupo tributário "${g.descricao}" incompleto: falta ${falta.join(', ')}. Complete o grupo em Dados Fiscais › Grupos tributários e grave de novo.`
+    : null;
+};
+
 const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
 function cnpjValido(c: string) {
@@ -178,6 +193,39 @@ function validarCampoFiscal(v: Record<string, any>, campo: Coluna): string | num
 async function colunasExistentes(db: any, dbName?: string) {
   const [cols]: any = await db.execute('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [dbName, 'cad_produtos']);
   return new Set<string>(cols.map((c: any) => c.COLUMN_NAME));
+}
+
+/**
+ * Inclusão de mercadoria (PAF-NFC-e de SC, Requisito VII; Ato DIAT 56/2026, Teste 2): não grava sem NCM, CEST, grupo tributário
+ * (CST/classificação e alíquota), IAT, IPPT, preço de venda e GTIN ou "SEM GTIN" (código em branco). Serviço: só preço e grupo tributário (§ 4º).
+ * Devolve as colunas fiscais do INSERT ou a mensagem de erro.
+ */
+async function fiscalDaInclusao(db: any, dbName: string | undefined, corpo: Record<string, any>, grupo: number): Promise<Record<string, any> | string> {
+  const existentes = await colunasExistentes(db, dbName);
+  const f: Record<string, any> = {};
+  try {
+    for (const c of ['codigo_barras', 'ncm', 'cest', 'grupo_tributario_id', 'iat', 'ippt', 'servico'] as const)
+      if (existentes.has(c) && (c === 'codigo_barras' || c in corpo)) f[c] = validarCampoFiscal(corpo, c);
+  } catch (e: any) {
+    return e.message;
+  }
+  // Serviço também entra na Tabela de Mercadorias e Serviços com preço (Requisito VII, § 4º)
+  if (!(Number(corpo.preco_venda) > 0)) return 'Informe o preço de venda.';
+  if (existentes.has('grupo_tributario_id') && !f.grupo_tributario_id) return 'Informe o grupo tributário (CST e alíquota).';
+  if (!f.servico) {
+    if (existentes.has('ncm') && !f.ncm) return 'Mercadoria: informe o NCM.';
+    if (existentes.has('cest') && !f.cest) return 'Mercadoria: informe o CEST.';
+    // Variação: o código de barras fica em cada variante
+    if (!String(corpo.tipo_produto ?? '').startsWith('variacao') && !f.codigo_barras && !corpo.sem_gtin)
+      return 'Informe o código de barras (GTIN) ou ligue "Sem GTIN".';
+  }
+  if (f.grupo_tributario_id) {
+    const [g]: any = await db.execute(`SELECT descricao, csosn, cst_icms, cst_ibscbs, cclass_trib FROM ${dbName}.fis_grupos_tributarios WHERE id = ? AND ativo = 1 AND grupo_id = ?`, [f.grupo_tributario_id, grupo]);
+    if (!g.length) return 'Grupo tributário inexistente ou inativo.';
+    if (faltaNoGrupo(g[0])) return faltaNoGrupo(g[0])!;
+    if (existentes.has('cest') && grupoComST(g[0]) && !f.cest) return 'Grupo tributário com substituição tributária: informe o CEST.';
+  }
+  return f;
 }
 
 export function createProdutosRouter() {
@@ -328,11 +376,15 @@ export function createProdutosRouter() {
         marca_id
       } = req.body;
       if (!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
+      if (!unidade_id) return res.status(400).json({ error: 'Informe a unidade de medida.' });
       const db = await getDb();
       const dbName = session.dbConfig?.database;
+      const fiscal = await fiscalDaInclusao(db, dbName, req.body, grupoDa(session));
+      if (typeof fiscal === 'string') return res.status(400).json({ error: fiscal });
+      const extras = Object.keys(fiscal);
       const [result]: any = await db.execute(
-        `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, codigo_barras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [grupoDa(session), sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, codigo_barras || null]
+        `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo${extras.map((c) => `, \`${c}\``).join('')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${', ?'.repeat(extras.length)})`,
+        [grupoDa(session), sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, ...Object.values(fiscal)]
       );
   
       const newId = result.insertId;
@@ -371,6 +423,30 @@ export function createProdutosRouter() {
       return res.json({ columns: linhas });
     } catch (error: any) {
       return res.status(500).json({ error: error.message || 'Erro ao ler as colunas' });
+    }
+  });
+
+  // PAF-NFC-e (Arquivo I, P2): produtos (ativos e inativos, mercadoria e serviço) sem grupo tributário ou com o grupo incompleto
+  router.get('/produtos/incompletos-paf', async (req: Request, res: Response) => {
+    try {
+      const session = await getIronSession<SessionData>(req, res, sessionOptions);
+      if (!session.isLoggedIn) return res.status(401).json({ error: 'Não autorizado' });
+      const db = await getDb();
+      const bd = session.dbConfig?.database;
+      const temGrupo = (await colunasExistentes(db, bd)).has('grupo_tributario_id');
+      const [linhas]: any = await db.execute(
+        `SELECT p.id, p.nome, p.ativo, g.id AS grupo_tributario_id, g.descricao AS grupo, g.cst_icms, g.cst_ibscbs, g.cclass_trib
+           FROM ${bd}.cad_produtos p
+           LEFT JOIN ${bd}.fis_grupos_tributarios g ON ${temGrupo ? 'g.id = p.grupo_tributario_id AND g.grupo_id = p.grupo_id' : '1 = 0'}
+          WHERE p.grupo_id = ? ORDER BY p.nome`,
+        [grupoDa(session)],
+      );
+      const lista = linhas
+        .map((l: any) => ({ id: l.id, nome: l.nome, ativo: l.ativo, grupo: l.grupo ?? null, falta: l.grupo_tributario_id ? pendenciasGrupo(l) : ['o grupo tributário'] }))
+        .filter((l: any) => l.falta.length);
+      return res.json(lista);
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
     }
   });
 
@@ -448,7 +524,15 @@ export function createProdutosRouter() {
   
       const { id } = req.params;
       const body = req.body;
-      const { sku_variante, nome_adicional, preco_custo, preco_venda, codigo_barras, ativo } = body;
+      const { sku_variante, nome_adicional, preco_custo, preco_venda, ativo } = body;
+      // PAF-NFC-e (Req. VII, I e VI; § 4º): variante com preço e GTIN válido (ou sem código), como o produto
+      if (!(Number(preco_venda) > 0)) return res.status(400).json({ error: 'Informe o preço de venda da variante.' });
+      let codigo_barras: string | number | null;
+      try {
+        codigo_barras = validarCampoFiscal(body, 'codigo_barras');
+      } catch (e: any) {
+        return res.status(400).json({ error: e.message });
+      }
   
       const db = await getDb();
       const dbName = session.dbConfig?.database;
@@ -508,11 +592,24 @@ export function createProdutosRouter() {
         codigo_barras,
         marca_id
       } = req.body;
+      // Alteração com as mesmas regras da inclusão (Requisito VII, § 4º: sem cadastro incompleto)
+      if (!String(nome ?? '').trim()) return res.status(400).json({ error: 'Informe o nome do produto.' });
+      if (!unidade_id) return res.status(400).json({ error: 'Informe a unidade de medida.' });
+      if (!(Number(preco_venda) > 0)) return res.status(400).json({ error: 'Informe o preço de venda.' });
+      let gtin: string | number | null;
+      try {
+        gtin = validarCampoFiscal(req.body, 'codigo_barras');
+      } catch (e: any) {
+        // Cadastro antigo com código que não é GTIN (PLU de balança, código interno): dizer como resolver
+        return res.status(400).json({
+          error: `${e.message}\nSe é um código interno ou o PLU da balança, apague ou corrija o código no campo Código Barras desta tela ou em "Dados fiscais" (fica "SEM GTIN" na nota): o PLU da balança é o próprio código (id) do produto, não precisa ficar no código de barras.`,
+        });
+      }
       const db = await getDb();
       const dbName = session.dbConfig?.database;
       const [r]: any = await db.execute(
         `UPDATE ${dbName}.cad_produtos SET sku = ?, nome = ?, descricao = ?, tipo_produto = ?, categoria_id = ?, marca_id = ?, unidade_id = ?, preco_custo = ?, preco_venda = ?, ativo = ?, codigo_barras = ? WHERE id = ? AND grupo_id = ?`,
-        [sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, codigo_barras || null, id, grupoDa(session)]
+        [sku, String(nome).trim(), descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, gtin, id, grupoDa(session)]
       );
       if (!r.affectedRows) return res.status(404).json({ error: 'Produto não encontrado.' });
   
@@ -952,9 +1049,16 @@ export function createProdutosRouter() {
       if (final.ind_escala === 'N' && existentes.has('cnpj_fabricante') && !final.cnpj_fabricante) {
         return res.status(400).json({ error: 'Escala não relevante (N): informe o CNPJ do fabricante.' });
       }
+      // PAF-NFC-e (Requisito VII): grupo tributário em mercadoria e serviço (§ 4º); NCM e CEST só em mercadoria (CEST em todas: decisão de 23/11/2026)
+      if ('grupo_tributario_id' in final && !final.grupo_tributario_id) return res.status(400).json({ error: 'Informe o grupo tributário (CST e alíquota).' });
+      if ('servico' in final && !final.servico) {
+        if ('ncm' in final && !final.ncm) return res.status(400).json({ error: 'Mercadoria: informe o NCM.' });
+        if ('cest' in final && !final.cest) return res.status(400).json({ error: 'Mercadoria: informe o CEST.' });
+      }
       if (final.grupo_tributario_id) {
-        const [g]: any = await db.execute(`SELECT id, csosn, cst_icms FROM ${dbName}.fis_grupos_tributarios WHERE id = ? AND ativo = 1`, [final.grupo_tributario_id]);
+        const [g]: any = await db.execute(`SELECT id, descricao, csosn, cst_icms, cst_ibscbs, cclass_trib FROM ${dbName}.fis_grupos_tributarios WHERE id = ? AND ativo = 1 AND grupo_id = ?`, [final.grupo_tributario_id, grupoDa(session)]);
         if (!g.length) return res.status(400).json({ error: 'Grupo tributário inexistente ou inativo.' });
+        if (faltaNoGrupo(g[0])) return res.status(400).json({ error: faltaNoGrupo(g[0]) });
         // CEST obrigatório só com ICMS por substituição tributária (e então exigido pelo PAF-NFC-e, Requisito VII)
         if (existentes.has('cest') && grupoComST(g[0])) {
           const cest = 'cest' in final ? final.cest : ((await db.execute(`SELECT cest FROM ${dbName}.cad_produtos WHERE id = ?`, [id])) as any)[0][0]?.cest;
@@ -1004,7 +1108,15 @@ export function createProdutosRouter() {
   
       const { id: produto_id } = req.params;
       const body = req.body;
-      const { sku_variante, nome_adicional, preco_custo, preco_venda, codigo_barras, ativo } = body;
+      const { sku_variante, nome_adicional, preco_custo, preco_venda, ativo } = body;
+      // PAF-NFC-e (Req. VII, I e VI; § 4º): variante com preço e GTIN válido (ou sem código), como o produto
+      if (!(Number(preco_venda) > 0)) return res.status(400).json({ error: 'Informe o preço de venda da variante.' });
+      let codigo_barras: string | number | null;
+      try {
+        codigo_barras = validarCampoFiscal(body, 'codigo_barras');
+      } catch (e: any) {
+        return res.status(400).json({ error: e.message });
+      }
       const valorIds = [...new Set<number>((Array.isArray(body.atributo_valor_ids) ? body.atributo_valor_ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
   
       const db = await getDb();
@@ -1029,7 +1141,7 @@ export function createProdutosRouter() {
         `INSERT INTO ${dbName}.cad_produtos_variantes
         (produto_id, sku_variante, nome_adicional, preco_custo, preco_venda, codigo_barras, ativo)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [produto_id, sku_variante, nome_adicional, preco_custo || 0, preco_venda || 0, codigo_barras || null, ativo ?? 1]
+        [produto_id, sku_variante, nome_adicional, preco_custo || 0, preco_venda, codigo_barras, ativo ?? 1]
       );
       for (const valorId of valorIds) {
         await conn.execute(`INSERT INTO ${dbName}.cad_produtos_variante_atributos (variante_id, atributo_valor_id) VALUES (?, ?)`, [result.insertId, valorId]);

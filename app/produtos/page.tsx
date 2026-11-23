@@ -10,9 +10,11 @@ import { ProdutosRelacionados } from '@/components/ProdutosRelacionados';
 import { Receipt, Boxes, Replace, ShoppingBasket, ArrowLeftRight, Warehouse } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AvisoErro } from '@/components/AvisoErro';
+import { ModalPesquisa } from '@/components/ModalPesquisa';
 import { AbasCrm } from '@/components/TelaHeader';
 import { FormCrm, Campo, INPUT_CLASS, TelaCheia, SecaoCrm, GradeCampos, ResumoRegistro } from '@/components/FormCrm';
 import { BotaoAcao, SeparadorAcoes, Vazio } from '@/components/MenuAcoes';
+import { Toggle } from '@/components/Toggle';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { 
   Plus, 
@@ -134,6 +136,9 @@ export default function ProdutosPage() {
   }, []);
   
   const [selectedProduto, setSelectedProduto] = useState<Produto | null>(null);
+  // PAF-NFC-e (Arquivo I, P2): produtos com a tributação incompleta travam o arquivo; recarrega ao voltar para a lista
+  const [incompletos, setIncompletos] = useState<{ id: number; nome: string; ativo: number; grupo: string | null; falta: string[] }[]>([]);
+  const [verIncompletos, setVerIncompletos] = useState(false);
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [isExpanding, setIsExpanding] = useState(false);
   const [variantsByProduct, setVariantsByProduct] = useState<{[key: number]: ProdutoVariante[]}>({});
@@ -1099,6 +1104,12 @@ export default function ProdutosPage() {
       ]);
   };
 
+  // Inclusão de mercadoria: campos fiscais obrigatórios do PAF-NFC-e (Requisito VII); na alteração ficam na tela "Dados fiscais"
+  const FISCAL_NOVO = { ncm: '', cest: '', grupo_tributario_id: '', iat: 'A', ippt: 'T', servico: 0, sem_gtin: false };
+  const [fiscalNovo, setFiscalNovo] = useState(FISCAL_NOVO);
+  const [gruposFiscais, setGruposFiscais] = useState<{ id: number; descricao: string }[]>([]);
+  const setF = (campo: keyof typeof FISCAL_NOVO, valor: any) => setFiscalNovo((f) => ({ ...f, [campo]: valor }));
+
   const openForm = (produto: Produto | null = null) => {
     if (produto) {
       setEditingProduto(produto);
@@ -1121,6 +1132,8 @@ export default function ProdutosPage() {
       });
     } else {
       setEditingProduto(null);
+      setFiscalNovo(FISCAL_NOVO);
+      fetch('/api/fiscal?tipo=grupos').then((r) => (r.ok ? r.json() : [])).then(setGruposFiscais).catch(() => {});
       setFormData({ 
         sku: '', 
         nome: '', 
@@ -1142,6 +1155,11 @@ export default function ProdutosPage() {
   };
 
   const closeTab = () => setActiveTab('grid');
+
+  useEffect(() => {
+    if (activeTab !== 'grid') return;
+    fetch('/api/produtos/incompletos-paf').then((r) => (r.ok ? r.json() : [])).then(setIncompletos).catch(() => setIncompletos([]));
+  }, [activeTab]);
 
   const fetchComposicao = async (produtoId: number) => {
     try {
@@ -1445,7 +1463,7 @@ export default function ProdutosPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(editingProduto ? formData : { ...formData, ...fiscalNovo })
       });
 
       if (res.ok) {
@@ -1515,6 +1533,34 @@ export default function ProdutosPage() {
         <div className="w-full flex-1 flex flex-col min-h-0 bg-elegant-bg">
           {activeTab === 'grid' ? (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {incompletos.length > 0 && (
+                <div className="mx-4 mt-3 flex items-center gap-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  <span className="flex-1">
+                    <b>{incompletos.length} {incompletos.length === 1 ? 'produto' : 'produtos'} com tributação incompleta</b> – o Arquivo I do PAF-NFC-e não é gerado enquanto houver (inclusive inativos e serviços).
+                  </span>
+                  <button type="button" onClick={() => setVerIncompletos(true)} className="rounded-md border border-amber-300 dark:border-amber-800 px-3 py-1 font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40">
+                    Ver lista
+                  </button>
+                </div>
+              )}
+              {verIncompletos && (
+                <ModalPesquisa
+                  titulo="Produtos com tributação incompleta (PAF-NFC-e)"
+                  placeholder="Filtrar por código ou nome"
+                  itens={incompletos}
+                  chave={(l) => l.id}
+                  filtrar={(l, t) => String(l.id) === t.trim() || l.nome.toLowerCase().includes(t.toLowerCase())}
+                  colunas={[
+                    { label: 'Código', render: (l) => l.id, alinhar: 'direita', largura: 'w-20' },
+                    { label: 'Nome', render: (l) => (l.ativo ? l.nome : `${l.nome} (inativo)`) },
+                    { label: 'Grupo tributário', render: (l) => l.grupo ?? '—', largura: 'w-48' },
+                    { label: 'Falta', render: (l) => l.falta.join(', ') },
+                  ]}
+                  onEscolher={(l) => { setVerIncompletos(false); openFiscal({ id: l.id, nome: l.nome } as Produto); }}
+                  onFechar={() => setVerIncompletos(false)}
+                  rodape="Escolha o produto para abrir os Dados fiscais; o grupo incompleto se completa em Dados Fiscais › Grupos tributários."
+                />
+              )}
               <ListaCrm
                 id="produtos"
                 className="flex-1"
@@ -1908,11 +1954,11 @@ export default function ProdutosPage() {
                       { label: 'Marca', key: 'marca_id', type: 'brand_select' },
                       { label: 'Unidade', key: 'unidade_id', type: 'unit_select' },
                       { label: 'Tipo', key: 'tipo_produto', type: 'select' },
-                      { label: 'Código Barras', key: 'codigo_barras', type: 'text', show: formData.tipo_produto === 'simples' || formData.tipo_produto === 'composto' },
+                      { label: 'Código Barras', key: 'codigo_barras', type: 'text' },
                       { label: 'Custo', key: 'preco_custo', type: 'currency' },
                       { label: 'Venda', key: 'preco_venda', type: 'currency' },
                       { label: 'Peso (kg)', key: 'peso_kg', type: 'decimal' }
-                    ].filter(f => f.show === undefined || f.show).map((field) => (
+                    ].map((field) => (
                 <Campo key={field.key} rotulo={field.label} span={['nome', 'categoria_id'].includes(field.key) || field.type === 'select' ? 2 : 1}>
                           {field.type === 'textarea' ? (
                             <textarea value={(formData[field.key as keyof typeof formData] || '') as any} onChange={(e) => setFormData({...formData, [field.key]: e.target.value})} onFocus={(e) => e.target.select()} className={INPUT_CLASS} />
@@ -1987,7 +2033,8 @@ export default function ProdutosPage() {
                               )}
                             </div>
                           ) : field.type === 'unit_select' ? (
-                            <select value={formData.unidade_id} onChange={(e) => setFormData({...formData, unidade_id: parseInt(e.target.value)})} className={INPUT_CLASS}>
+                            <select required value={formData.unidade_id || ''} onChange={(e) => setFormData({...formData, unidade_id: Number(e.target.value)})} className={INPUT_CLASS}>
+                              <option value="">Escolha…</option>
                               {unidades.map(unit => (
                                 <option key={unit.id} value={unit.id}>{unit.nome} ({unit.sigla})</option>
                               ))}
@@ -2025,6 +2072,42 @@ export default function ProdutosPage() {
                           )}
                         </Campo>
               ))}
+              {!editingProduto && [
+                <Campo key="servico" rotulo="É serviço" dica="Serviço não pede NCM, CEST, IAT, IPPT nem GTIN; o grupo tributário é obrigatório também no serviço (PAF-NFC-e)">
+                  <Toggle checked={Boolean(fiscalNovo.servico)} onChange={(v) => setF('servico', v ? 1 : 0)} />
+                </Campo>,
+                <Campo key="grupo" rotulo="Grupo tributário" span={2}>
+                  <select required value={fiscalNovo.grupo_tributario_id} onChange={(e) => setF('grupo_tributario_id', e.target.value)} className={INPUT_CLASS}>
+                    <option value="">Escolha…</option>
+                    {gruposFiscais.map((g) => <option key={g.id} value={g.id}>{g.descricao}</option>)}
+                  </select>
+                </Campo>,
+                ...(fiscalNovo.servico ? [] : [
+                  ...(formData.tipo_produto === 'simples' || formData.tipo_produto === 'composto' ? [
+                    <Campo key="sem_gtin" rotulo="Sem GTIN" dica='Ligado: a nota sai "SEM GTIN" quando o código de barras ficar em branco'>
+                      <Toggle checked={fiscalNovo.sem_gtin} onChange={(v) => setF('sem_gtin', v)} />
+                    </Campo>,
+                  ] : []),
+                  <Campo key="ncm" rotulo="NCM">
+                    <input type="text" inputMode="numeric" required maxLength={8} value={fiscalNovo.ncm} onFocus={(e) => e.target.select()} onChange={(e) => setF('ncm', e.target.value.replace(/\D/g, ''))} className={`${INPUT_CLASS} font-mono`} />
+                  </Campo>,
+                  <Campo key="cest" rotulo="CEST">
+                    <input type="text" inputMode="numeric" required maxLength={7} value={fiscalNovo.cest} onFocus={(e) => e.target.select()} onChange={(e) => setF('cest', e.target.value.replace(/\D/g, ''))} className={`${INPUT_CLASS} font-mono`} />
+                  </Campo>,
+                  <Campo key="iat" rotulo="IAT">
+                    <select required value={fiscalNovo.iat} onChange={(e) => setF('iat', e.target.value)} className={INPUT_CLASS}>
+                      <option value="A">A - Arredondamento</option>
+                      <option value="T">T - Truncamento</option>
+                    </select>
+                  </Campo>,
+                  <Campo key="ippt" rotulo="IPPT">
+                    <select required value={fiscalNovo.ippt} onChange={(e) => setF('ippt', e.target.value)} className={INPUT_CLASS}>
+                      <option value="T">T - Terceiros</option>
+                      <option value="P">P - Produção própria</option>
+                    </select>
+                  </Campo>,
+                ]),
+              ]}
             </FormCrm>
           ) : (
             <TelaCheia rodape={'Produto #' + selectedProduto?.id + ' • Variantes'} onVoltar={closeTab}>

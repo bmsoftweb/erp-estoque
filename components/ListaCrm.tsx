@@ -463,7 +463,8 @@ export function ListaCrm<T>({ id, colunas, linhas: linhasOrigem, chave, ordenave
                 <tr
                   onClick={() => selecionar(k, l)}
                   onDoubleClick={() => onEditar?.(l)}
-                  className={`group cursor-default transition-colors ${sel ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800/60'}`}
+                  className={`group cursor-default transition-colors ${/* Cores opacas: as células fixas (indicador e Ações) herdam o fundo da linha e não podem deixar ver o que rola por baixo */
+                    sel ? 'bg-blue-50 dark:bg-[color-mix(in_oklab,var(--color-blue-950)_30%,var(--color-stone-900))]' : 'bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-[color-mix(in_oklab,var(--color-stone-800)_60%,var(--color-stone-900))]'}`}
                 >
                   <td className={`sticky left-0 z-[5] w-[30px] min-w-[30px] max-w-[30px] px-0 text-center align-middle bg-inherit border-r border-stone-200 dark:border-stone-800 ${bB}`}>
                     {exp ? (

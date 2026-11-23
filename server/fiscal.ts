@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getIronSession } from 'iron-session';
 import { sessionOptions, SessionData } from './session.js';
 import { getDb } from './db.js';
+import { grupoDa } from './empresa.js';
 
 export function createFiscalRouter() {
   const router = Router();
@@ -17,7 +18,7 @@ export function createFiscalRouter() {
       const codigo = (q.get('codigo') || '').replace(/\D/g, '');
   
       if (tipo === 'grupos') {
-        const [rows]: any = await db.execute(`SELECT * FROM ${dbName}.fis_grupos_tributarios WHERE ativo = 1 ORDER BY descricao`);
+        const [rows]: any = await db.execute(`SELECT * FROM ${dbName}.fis_grupos_tributarios WHERE ativo = 1 AND grupo_id = ? ORDER BY descricao`, [grupoDa(session)]);
         return res.json(rows);
       }
       // Listas com pesquisa: ?tipo=buscar&tabela=ncm|servico|nbs|cest [&q=texto | &codigo=exato] [&item=0107] [&ncm=44089090]
