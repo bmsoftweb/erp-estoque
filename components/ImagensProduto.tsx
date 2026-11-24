@@ -131,7 +131,7 @@ export const ImagensProduto: React.FC<{ produto: { id: number; nome: string; sku
   });
 
   const [busca, setBusca] = useState(false);
-  // Fonte configurada no grupo (BM-Master > Configurações > Estoque): serper = busca aqui; google = abre o Google numa aba
+  // Fonte configurada no grupo (ERP-Master > Configurações > Estoque): serper = busca aqui; google = abre o Google numa aba
   const [fonte, setFonte] = useState<'google' | 'serper'>('google');
   useEffect(() => {
     fetch('/api/imagens-web/fonte')

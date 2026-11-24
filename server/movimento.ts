@@ -4,7 +4,7 @@ import { sessionOptions, SessionData } from './session.js';
 import { getDb, colunasInfo } from './db.js';
 import { lerConfigGrid } from './config-grid.js';
 import { empresaDa, grupoDa } from './empresa.js';
-import { Invalido, validarMovimento, aplicarNoSaldo, emTransacao, lerMovimento } from './estoque.js';
+import { Invalido, validarMovimento, aplicarNoSaldo, emTransacao, lerMovimento, custoMedio } from './estoque.js';
 
 const NAO_ACHOU = (res: Response) => res.status(404).json({ error: 'Movimentação não encontrada.' });
 
@@ -142,12 +142,14 @@ export function createMovimentoRouter() {
       const m = await validarMovimento(db, dbName, req.body, grupoDa(session), empresa);
   
       const novoId = await emTransacao(db, async (conn) => {
+        const medio = await custoMedio(conn, dbName, empresa, m);
         await aplicarNoSaldo(conn, dbName, [{ m, sinal: 1 }]);
+        const v = await medio();
         const [r]: any = await conn.execute(
           `INSERT INTO ${dbName}.est_estoque_movimentacoes
-            (empresa_id, tipo, lote_id, localizacao_orig_id, localizacao_dest_id, quantidade, custo_unitario, referencia_tipo, referencia_id, produto_id, variante_id, usuario, observacao, date_insert)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [empresa, m.tipo, m.lote_id, m.localizacao_orig_id, m.localizacao_dest_id, m.quantidade, m.custo_unitario, m.referencia_tipo, m.referencia_id, m.produto_id, m.variante_id, session.userName || 'Sistema', m.observacao]
+            (empresa_id, tipo, lote_id, localizacao_orig_id, localizacao_dest_id, quantidade, custo_unitario, estoque_valor, custo_medio, referencia_tipo, referencia_id, produto_id, variante_id, usuario, observacao, date_insert)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [empresa, m.tipo, m.lote_id, m.localizacao_orig_id, m.localizacao_dest_id, m.quantidade, m.custo_unitario, v.estoque_valor, v.custo_medio, m.referencia_tipo, m.referencia_id, m.produto_id, m.variante_id, session.userName || 'Sistema', m.observacao]
         );
         return r.insertId;
       });
@@ -198,6 +200,8 @@ export function createMovimentoRouter() {
       fields.splice(fields.findIndex((f: any) => f.key === 'produto_id') + 1, 0, { key: 'produto_nome', label: 'Produto', type: 'varchar', isRelation: false, relationTable: null });
       fields.splice(fields.findIndex((f: any) => f.key === 'quantidade') + 1, 0, { key: 'saldo', label: 'Saldo', type: 'decimal', isRelation: false, relationTable: null });
       fields.splice(fields.findIndex((f: any) => f.key === 'id') + 1, 0, { key: 'data_hora', label: 'Data/Hora', type: 'datetime', isRelation: false, relationTable: null });
+      // Custo médio e valor do estoque do produto na filial depois do movimento (gravados pelo lançamento)
+      for (const f of fields) if (f.key === 'custo_medio') f.label = 'Custo Médio'; else if (f.key === 'estoque_valor') f.label = 'Valor em Estoque';
 
       return res.json(fields);
     } catch (error: any) {
@@ -219,8 +223,10 @@ export function createMovimentoRouter() {
         const antigo = await lerMovimento(conn, dbName, id, empresa);
         if (!antigo) return false;
         await aplicarNoSaldo(conn, dbName, [{ m: antigo, sinal: -1 }, { m, sinal: 1 }]);
+        // ponytail: alterar um movimento não refaz o custo médio da história; ele fica sem as duas colunas e o próximo
+        // lançamento parte do último médio gravado. Recalcular a ficha inteira se alteração de movimento for comum.
         await conn.execute(
-          `UPDATE ${dbName}.est_estoque_movimentacoes SET tipo = ?, lote_id = ?, localizacao_orig_id = ?, localizacao_dest_id = ?, quantidade = ?, custo_unitario = ?, referencia_tipo = ?, referencia_id = ?, produto_id = ?, variante_id = ?, observacao = ? WHERE id = ? AND empresa_id = ?`,
+          `UPDATE ${dbName}.est_estoque_movimentacoes SET tipo = ?, lote_id = ?, localizacao_orig_id = ?, localizacao_dest_id = ?, quantidade = ?, custo_unitario = ?, estoque_valor = NULL, custo_medio = NULL, referencia_tipo = ?, referencia_id = ?, produto_id = ?, variante_id = ?, observacao = ? WHERE id = ? AND empresa_id = ?`,
           [m.tipo, m.lote_id, m.localizacao_orig_id, m.localizacao_dest_id, m.quantidade, m.custo_unitario, m.referencia_tipo, m.referencia_id, m.produto_id, m.variante_id, m.observacao, id, empresa]
         );
         return true;

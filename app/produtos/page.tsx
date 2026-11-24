@@ -52,6 +52,7 @@ interface Produto {
   preco_venda: number;
   peso_kg: number | null;
   ativo: number;
+  controla_lote?: number;
   codigo_barras: string | null;
   date_insert: string;
   date_update: string;
@@ -271,6 +272,7 @@ export default function ProdutosPage() {
     preco_venda: number;
     peso_kg: number;
     ativo: number;
+    controla_lote: number;
     atributos_selecionados: number[];
     codigo_barras: string;
   }>({
@@ -285,6 +287,7 @@ export default function ProdutosPage() {
     preco_venda: 0,
     peso_kg: 0,
     ativo: 1,
+    controla_lote: 0,
     atributos_selecionados: [],
     codigo_barras: ''
   });
@@ -1125,6 +1128,7 @@ export default function ProdutosPage() {
         preco_venda: produto.preco_venda,
         peso_kg: produto.peso_kg || 0,
         ativo: produto.ativo,
+        controla_lote: Number(produto.controla_lote) ? 1 : 0,
         codigo_barras: (produto as any).codigo_barras || '',
         atributos_selecionados: produto.atributos_vinculados 
           ? produto.atributos_vinculados.split(',').map(Number) 
@@ -1147,6 +1151,7 @@ export default function ProdutosPage() {
         preco_venda: 0,
         peso_kg: 0,
         ativo: 1,
+        controla_lote: 0,
         atributos_selecionados: []
       });
     }
@@ -1957,7 +1962,9 @@ export default function ProdutosPage() {
                       { label: 'Código Barras', key: 'codigo_barras', type: 'text' },
                       { label: 'Custo', key: 'preco_custo', type: 'currency' },
                       { label: 'Venda', key: 'preco_venda', type: 'currency' },
-                      { label: 'Peso (kg)', key: 'peso_kg', type: 'decimal' }
+                      { label: 'Peso (kg)', key: 'peso_kg', type: 'decimal' },
+                      // Sem controle, a entrada de nota (erp-compras) põe tudo no lote "0"; com controle, exige o lote da nota
+                      { label: 'Controla lote', key: 'controla_lote', type: 'toggle' }
                     ].map((field) => (
                 <Campo key={field.key} rotulo={field.label} span={['nome', 'categoria_id'].includes(field.key) || field.type === 'select' ? 2 : 1}>
                           {field.type === 'textarea' ? (
@@ -2059,6 +2066,8 @@ export default function ProdutosPage() {
                               onChange={(e) => handleCurrencyChange(field.key, e.target.value)}
                               className={`${INPUT_CLASS} font-mono text-left`} 
                             />
+                          ) : field.type === 'toggle' ? (
+                            <div className="pt-1.5"><Toggle checked={Boolean(formData.controla_lote)} onChange={(v) => setFormData({ ...formData, controla_lote: v ? 1 : 0 })} /></div>
                           ) : field.type === 'decimal' ? (
                             <input 
                               type="text" 

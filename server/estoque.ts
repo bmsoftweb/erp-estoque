@@ -147,6 +147,54 @@ export async function aplicarNoSaldo(conn: any, bd: string, itens: { m: Moviment
   }
 }
 
+const casas = (v: number, c: number) => Math.round(v * 10 ** c) / 10 ** c;
+
+/** Quantidade do produto/variante na filial (lotes e localizações não virtuais somados), com as linhas travadas */
+async function qtdNaFilial(conn: any, bd: string, empresa: number, produto: number, variante: number | null) {
+  const [r]: any = await conn.execute(
+    `SELECT s.quantidade FROM ${bd}.est_estoque_saldo s
+       JOIN ${bd}.cad_produtos_lotes l ON l.id = s.lote_id
+       JOIN ${bd}.cad_produtos_localizacoes lc ON lc.id = s.localizacao_id
+      WHERE l.produto_id = ? AND COALESCE(l.variante_id, 0) = ? AND lc.empresa_id = ? AND lc.tipo <> 'virtual'
+      FOR UPDATE`,
+    [produto, variante ?? 0, empresa]
+  );
+  return r.reduce((s: number, x: any) => s + Number(x.quantidade), 0);
+}
+
+/**
+ * Custo médio do produto na filial (produto + variante), na mesma conta do erp-compras: chamar ANTES de aplicarNoSaldo
+ * (lê a quantidade de antes e trava o produto) e chamar a função devolvida DEPOIS, que dá custo_medio e estoque_valor.
+ * - Médio de antes: o do último movimento da filial com a coluna; sem nenhum, o preco_custo do lote.
+ * - Entrada (entrada, ajuste positivo, produção) com custo: (qtd_antes × médio + q × custo) ÷ qtd_depois; saldo
+ *   zerado ou negativo recomeça do custo. Grava o médio novo no preco_custo do lote, como o erp-compras.
+ * - Saída, perda, transferência: o médio não muda; o valor acompanha a quantidade (transferência para localização
+ *   virtual tira do estoque contado). Reserva não mexe na quantidade: fica sem as duas colunas.
+ */
+export async function custoMedio(conn: any, bd: string, empresa: number, m: Movimento) {
+  if (m.tipo === 'reserva' || m.tipo === 'liberacao_reserva') return async () => ({ custo_medio: null as number | null, estoque_valor: null as number | null });
+  await conn.execute(`SELECT id FROM ${bd}.cad_produtos WHERE id = ? FOR UPDATE`, [m.produto_id]);
+  const antes = await qtdNaFilial(conn, bd, empresa, m.produto_id, m.variante_id);
+  const [mov]: any = await conn.execute(
+    `SELECT custo_medio FROM ${bd}.est_estoque_movimentacoes
+      WHERE empresa_id = ? AND produto_id = ? AND COALESCE(variante_id, 0) = ? AND custo_medio IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [empresa, m.produto_id, m.variante_id ?? 0]
+  );
+  const [lt]: any = await conn.execute(`SELECT preco_custo FROM ${bd}.cad_produtos_lotes WHERE id = ?`, [m.lote_id]);
+  let medio: number | null = mov.length ? Number(mov[0].custo_medio) : Number(lt[0]?.preco_custo) > 0 ? Number(lt[0].preco_custo) : null;
+  return async () => {
+    const depois = await qtdNaFilial(conn, bd, empresa, m.produto_id, m.variante_id);
+    const entrou = casas(depois - antes, 4);
+    const custo = Number(m.custo_unitario);
+    if (ENTRA.includes(m.tipo) && entrou > 0 && custo > 0) {
+      medio = antes <= 0 || medio === null ? casas(custo, 6) : casas((antes * medio + entrou * custo) / depois, 6);
+      await conn.execute(`UPDATE ${bd}.cad_produtos_lotes SET preco_custo = ? WHERE id = ?`, [medio, m.lote_id]);
+    }
+    return { custo_medio: medio, estoque_valor: medio === null ? null : casas(depois * medio, 2) };
+  };
+}
+
 /** Lê um movimento gravado (da filial) no formato usado por aplicarNoSaldo */
 export async function lerMovimento(conn: any, bd: string, movId: number | string, empresa: number): Promise<Movimento | null> {
   const [r]: any = await conn.execute(`SELECT * FROM ${bd}.est_estoque_movimentacoes WHERE id = ? AND empresa_id = ? FOR UPDATE`, [movId, empresa]);

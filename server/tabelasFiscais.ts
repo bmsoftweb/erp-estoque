@@ -403,7 +403,7 @@ async function atualizarIbsCbs(bd: string, empresaId: number) {
   if (Number(hoje?.ja)) throw new Error('As tabelas do IBS/CBS já foram atualizadas hoje: o SVRS pede no máximo uma consulta por dia.');
 
   const [certs]: any = await db.query(`SELECT arquivo, senha FROM ${bd}.sys_empresas_certificados WHERE empresa_id = ? LIMIT 1`, [empresaId]);
-  if (!certs.length) throw new Error('Nenhum certificado digital cadastrado para esta empresa. Grave o arquivo .pfx no BM-Master (Grupos › Empresas › Configurações).');
+  if (!certs.length) throw new Error('Nenhum certificado digital cadastrado para esta empresa. Grave o arquivo .pfx no ERP-Master (Grupos › Empresas › Configurações).');
   let agent: https.Agent;
   try {
     agent = new https.Agent({ pfx: Buffer.from(certs[0].arquivo), passphrase: certs[0].senha, minVersion: 'TLSv1.2' });

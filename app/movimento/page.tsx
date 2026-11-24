@@ -572,7 +572,7 @@ export default function MovimentoPage() {
         
         setFilterSchema(finalSchema);
 
-        const defaultColumns = ['id', 'data_hora', 'tipo', 'produto_nome', 'lote_id', 'quantidade', 'saldo', 'custo_unitario', 'localizacao_orig_id', 'localizacao_dest_id'];
+        const defaultColumns = ['id', 'data_hora', 'tipo', 'produto_nome', 'lote_id', 'quantidade', 'saldo', 'custo_unitario', 'custo_medio', 'estoque_valor', 'localizacao_orig_id', 'localizacao_dest_id'];
 
         if (gridProdConfigs.length > 0) {
           // Deduplicate configs
@@ -589,9 +589,11 @@ export default function MovimentoPage() {
             .sort((a: any, b: any) => (a.ordem || 0) - (b.ordem || 0))
             .map((c: any) => c.nome_da_coluna);
           
-          // Colunas novas (Produto, Saldo): quem salvou a grade antes delas as recebe ao lado da coluna de referência (se ocultar, fica oculta)
-          for (const [nova, depoisDe] of [['data_hora', 'id'], ['produto_nome', 'tipo'], ['saldo', 'quantidade']]) {
-            if (visibleCols.length > 0 && !configMap.has(nova)) visibleCols.splice(visibleCols.indexOf(depoisDe) + 1, 0, nova);
+          // Colunas novas (Produto, Saldo, Custo médio, Valor em estoque): quem salvou a grade antes delas as recebe ao lado
+          // da coluna de referência, ou no fim se ela estiver oculta (se ocultar, fica oculta)
+          for (const [nova, depoisDe] of [['data_hora', 'id'], ['produto_nome', 'tipo'], ['saldo', 'quantidade'], ['custo_medio', 'custo_unitario'], ['estoque_valor', 'custo_medio']]) {
+            const i = visibleCols.indexOf(depoisDe);
+            if (visibleCols.length > 0 && !configMap.has(nova)) visibleCols.splice(i < 0 ? visibleCols.length : i + 1, 0, nova);
           }
           if (visibleCols.length > 0) {
             setActiveGridColumns(visibleCols);
@@ -888,7 +890,8 @@ export default function MovimentoPage() {
 
     // Determinar alinhamento e formatação baseada no tipo ou na coluna
     if (type === 'moeda') {
-      displayValue = formatCurrency(parseFloat(value) || 0);
+      // Sem valor (ex.: custo médio de movimento antigo) fica em branco, não "R$ 0,00"
+      displayValue = value === null || value === undefined || value === '' ? '' : formatCurrency(parseFloat(value) || 0);
       align = 'text-right';
       mono = 'font-mono';
     } else if (type === 'numero') {

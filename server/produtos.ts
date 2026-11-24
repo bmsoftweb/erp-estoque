@@ -371,6 +371,7 @@ export function createProdutosRouter() {
         preco_custo, 
         preco_venda, 
         ativo,
+        controla_lote,
         atributos_selecionados,
         codigo_barras,
         marca_id
@@ -383,8 +384,8 @@ export function createProdutosRouter() {
       if (typeof fiscal === 'string') return res.status(400).json({ error: fiscal });
       const extras = Object.keys(fiscal);
       const [result]: any = await db.execute(
-        `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo${extras.map((c) => `, \`${c}\``).join('')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${', ?'.repeat(extras.length)})`,
-        [grupoDa(session), sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, ...Object.values(fiscal)]
+        `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, controla_lote${extras.map((c) => `, \`${c}\``).join('')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${', ?'.repeat(extras.length)})`,
+        [grupoDa(session), sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, ...Object.values(fiscal)]
       );
   
       const newId = result.insertId;
@@ -588,6 +589,7 @@ export function createProdutosRouter() {
         preco_custo, 
         preco_venda, 
         ativo,
+        controla_lote,
         atributos_selecionados,
         codigo_barras,
         marca_id
@@ -608,8 +610,8 @@ export function createProdutosRouter() {
       const db = await getDb();
       const dbName = session.dbConfig?.database;
       const [r]: any = await db.execute(
-        `UPDATE ${dbName}.cad_produtos SET sku = ?, nome = ?, descricao = ?, tipo_produto = ?, categoria_id = ?, marca_id = ?, unidade_id = ?, preco_custo = ?, preco_venda = ?, ativo = ?, codigo_barras = ? WHERE id = ? AND grupo_id = ?`,
-        [sku, String(nome).trim(), descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, gtin, id, grupoDa(session)]
+        `UPDATE ${dbName}.cad_produtos SET sku = ?, nome = ?, descricao = ?, tipo_produto = ?, categoria_id = ?, marca_id = ?, unidade_id = ?, preco_custo = ?, preco_venda = ?, ativo = ?, controla_lote = ?, codigo_barras = ? WHERE id = ? AND grupo_id = ?`,
+        [sku, String(nome).trim(), descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, gtin, id, grupoDa(session)]
       );
       if (!r.affectedRows) return res.status(404).json({ error: 'Produto não encontrado.' });
   

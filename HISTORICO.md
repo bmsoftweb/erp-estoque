@@ -2,6 +2,13 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.9 — 2026-11-23
+
+- Custo médio nos lançamentos: entradas recalculam o médio da filial (e o `preco_custo` do lote), saídas mantêm; gravados em `custo_medio` e `estoque_valor` do movimento.
+- Movimento: colunas "Custo Médio" e "Valor em Estoque"; editar um movimento limpa as duas.
+- Produtos: toggle "Controla lote" (`cad_produtos.controla_lote`, script `erp-compras/extras/2026-11-23_produtos_controla_lote.sql`).
+- Nome "ERP-Master" no lugar de "BM-Master" em mensagens e comentários.
+
 ## 0.1.8 — 2026-11-23
 
 - PAF-NFC-e (Requisito VII): grupo tributário exige CST do ICMS (também no Simples) e cClassTrib; mercadoria e serviço só com grupo completo; preço de venda e unidade obrigatórios; variantes com preço e GTIN válidos; aviso e lista dos produtos com tributação incompleta (sem eles o Arquivo I do PAF não é gerado); Dados fiscais mostram o cProd real (GTIN ou id).
