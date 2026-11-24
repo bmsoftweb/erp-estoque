@@ -2,6 +2,10 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.10 — 2026-11-23
+
+- Marca BM na tela: mensagens e textos citam o "BM-Master" (no lugar de "ERP-Master"). Vale para os erros do Serper e do certificado.
+
 ## 0.1.9 — 2026-11-23
 
 - Custo médio nos lançamentos: entradas recalculam o médio da filial (e o `preco_custo` do lote), saídas mantêm; gravados em `custo_medio` e `estoque_valor` do movimento.

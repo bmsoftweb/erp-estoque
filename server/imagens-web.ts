@@ -8,7 +8,7 @@ import { grupoDa } from './empresa.js';
 
 /**
  * Imagens da internet para o cadastro (tela Imagens do produto):
- * Configuração em sys_grupos.config → "estoque" (ERP-Master, Configurações > Estoque):
+ * Configuração em sys_grupos.config → "estoque" (BM-Master, Configurações > Estoque):
  *   imagens_fonte "google" (padrão, sem custo: a tela abre o Google Imagens numa aba) ou "serper" (+ serper_api_key).
  *   GET /api/imagens-web/fonte        → { fonte }
  *   GET /api/imagens-web/busca?q=…   → Google Imagens via Serper.dev (só com a fonte "serper")
@@ -104,7 +104,7 @@ export function createImagensWebRouter() {
       if (!q) return res.status(400).json({ error: 'Informe o que buscar.' });
       const { fonte, chave } = await configEstoque(res.locals.grupo);
       if (fonte !== 'serper' || !chave)
-        return res.status(400).json({ error: 'Busca pelo Serper não configurada: veja Configurações > Estoque no ERP-Master.' });
+        return res.status(400).json({ error: 'Busca pelo Serper não configurada: veja Configurações > Estoque no BM-Master.' });
       const r = await fetch('https://google.serper.dev/images', {
         method: 'POST',
         headers: { 'X-API-KEY': chave, 'Content-Type': 'application/json' },
