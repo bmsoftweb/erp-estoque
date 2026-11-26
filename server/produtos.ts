@@ -7,6 +7,10 @@ import { lerConfigGrid } from './config-grid.js';
 import { grupoDa, ehDoGrupo, empresaDa } from './empresa.js';
 import { gtinValido } from '../lib/gtin.js';
 import { rotasRelacionados } from './produtos-relacionados.js';
+import { randomUUID } from 'node:crypto';
+
+/** SKU de quem deixou o campo em branco: SKU-000123 (padStart não corta id acima de 999999, o LPAD cortaria) */
+const skuAutomatico = (id: number | string) => `SKU-${String(id).padStart(6, '0')}`;
 
 /** A variante é de um produto desta empresa */
 const DO_GRUPO = (bd: string | undefined) => `produto_id IN (SELECT id FROM ${bd}.cad_produtos WHERE grupo_id = ?)`;
@@ -22,6 +26,22 @@ const SEM_TABELA = 'A tabela de embalagens ainda não foi criada no banco (extra
 class Invalido extends Error {}
 
 const num = (v: any) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/**
+ * Peso e medidas (cubagem do erp-wms, extras/2026-11-26_produtos_dimensoes.sql): vazio ou 0 = não informado (NULL).
+ * Só as chaves que vieram no corpo, para uma gravação parcial não apagar o que já estava. `limite` = maior valor que cabe na coluna.
+ */
+const MEDIDAS = { peso_kg: 'Peso (kg)', altura_cm: 'Altura (cm)', largura_cm: 'Largura (cm)', comprimento_cm: 'Comprimento (cm)' } as const;
+function medidas(b: Record<string, any>, limitePeso: number, onde = ''): Partial<Record<keyof typeof MEDIDAS, number | null>> {
+  const out: Partial<Record<keyof typeof MEDIDAS, number | null>> = {};
+  for (const [c, rotulo] of Object.entries(MEDIDAS) as [keyof typeof MEDIDAS, string][]) {
+    if (!(c in b)) continue;
+    const v = num(b[c]) ?? 0;
+    if (!Number.isFinite(v) || v < 0 || v >= (c === 'peso_kg' ? limitePeso : 1e8)) throw new Invalido(`${onde}${rotulo}: valor inválido.`);
+    out[c] = v > 0 ? v : null;
+  }
+  return out;
+}
 
 function validar(lista: any[]) {
   if (!Array.isArray(lista)) throw new Invalido('Embalagens inválidas.');
@@ -46,7 +66,8 @@ function validar(lista: any[]) {
     }
     const preco = num(e.preco);
     if (preco !== null && (!Number.isFinite(preco) || preco < 0)) throw new Invalido(`Embalagem ${sigla}: preço inválido.`);
-    return { id: Number(e.id) || null, sigla, descricao, fator, codigo: codigo || null, preco, ativo: e.ativo === false || e.ativo === 0 ? 0 : 1 };
+    const m = medidas({ peso_kg: e.peso_kg, altura_cm: e.altura_cm, largura_cm: e.largura_cm, comprimento_cm: e.comprimento_cm }, 1e12, `Embalagem ${sigla}: `);
+    return { id: Number(e.id) || null, sigla, descricao, fator, codigo: codigo || null, preco, ...m, ativo: e.ativo === false || e.ativo === 0 ? 0 : 1 };
   });
 }
 
@@ -382,13 +403,36 @@ export function createProdutosRouter() {
       const dbName = session.dbConfig?.database;
       const fiscal = await fiscalDaInclusao(db, dbName, req.body, grupoDa(session));
       if (typeof fiscal === 'string') return res.status(400).json({ error: fiscal });
+      let med;
+      try {
+        med = medidas(req.body, 1e6);
+      } catch (e: any) {
+        return res.status(400).json({ error: e.message });
+      }
+      Object.assign(fiscal, med);
       const extras = Object.keys(fiscal);
-      const [result]: any = await db.execute(
-        `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, controla_lote${extras.map((c) => `, \`${c}\``).join('')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${', ?'.repeat(extras.length)})`,
-        [grupoDa(session), sku, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, ...Object.values(fiscal)]
-      );
-  
-      const newId = result.insertId;
+      const skuDigitado = String(sku ?? '').trim();
+      // SKU em branco: SKU-<id com 6 dígitos>, trocado na mesma transação (a coluna é NOT NULL e única por grupo)
+      const conn = await db.getConnection();
+      let newId: number;
+      let skuFinal: string;
+      try {
+        await conn.beginTransaction();
+        const [result]: any = await conn.execute(
+          `INSERT INTO ${dbName}.cad_produtos (grupo_id, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, controla_lote${extras.map((c) => `, \`${c}\``).join('')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${', ?'.repeat(extras.length)})`,
+          [grupoDa(session), skuDigitado || `tmp-${randomUUID()}`, nome, descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, ...Object.values(fiscal)]
+        );
+        newId = result.insertId;
+        skuFinal = skuDigitado || skuAutomatico(newId);
+        if (!skuDigitado) await conn.execute(`UPDATE ${dbName}.cad_produtos SET sku = ? WHERE id = ?`, [skuFinal, newId]);
+        await conn.commit();
+      } catch (e: any) {
+        await conn.rollback();
+        if (e?.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: `O SKU ${skuDigitado || 'gerado'} já é de outro produto.` });
+        throw e;
+      } finally {
+        conn.release();
+      }
   
       if (atributos_selecionados && Array.isArray(atributos_selecionados) && (tipo_produto === 'variacao_simples' || tipo_produto === 'variacao_atributo')) {
         for (const attrId of atributos_selecionados) {
@@ -405,7 +449,7 @@ export function createProdutosRouter() {
         ? atributos_selecionados.filter((a: any) => a && !isNaN(parseInt(a))).join(',')
         : null;
   
-      return res.json({ id: newId, sku, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, atributos_vinculados, codigo_barras });
+      return res.json({ id: newId, sku: skuFinal, nome, descricao, tipo_produto, categoria_id, marca_id, unidade_id, preco_custo, preco_venda, ativo, atributos_vinculados, codigo_barras });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }
@@ -607,11 +651,17 @@ export function createProdutosRouter() {
           error: `${e.message}\nSe é um código interno ou o PLU da balança, apague ou corrija o código no campo Código Barras desta tela ou em "Dados fiscais" (fica "SEM GTIN" na nota): o PLU da balança é o próprio código (id) do produto, não precisa ficar no código de barras.`,
         });
       }
+      let med;
+      try {
+        med = medidas(req.body, 1e6);
+      } catch (e: any) {
+        return res.status(400).json({ error: e.message });
+      }
       const db = await getDb();
       const dbName = session.dbConfig?.database;
       const [r]: any = await db.execute(
-        `UPDATE ${dbName}.cad_produtos SET sku = ?, nome = ?, descricao = ?, tipo_produto = ?, categoria_id = ?, marca_id = ?, unidade_id = ?, preco_custo = ?, preco_venda = ?, ativo = ?, controla_lote = ?, codigo_barras = ? WHERE id = ? AND grupo_id = ?`,
-        [sku, String(nome).trim(), descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, gtin, id, grupoDa(session)]
+        `UPDATE ${dbName}.cad_produtos SET sku = ?, nome = ?, descricao = ?, tipo_produto = ?, categoria_id = ?, marca_id = ?, unidade_id = ?, preco_custo = ?, preco_venda = ?, ativo = ?, controla_lote = ?, codigo_barras = ?${Object.keys(med).map((c) => `, ${c} = ?`).join('')} WHERE id = ? AND grupo_id = ?`,
+        [String(sku ?? '').trim() || skuAutomatico(id), String(nome).trim(), descricao, tipo_produto, categoria_id || null, marca_id || null, unidade_id, preco_custo, preco_venda, ativo, Number(controla_lote) ? 1 : 0, gtin, ...Object.values(med), id, grupoDa(session)]
       );
       if (!r.affectedRows) return res.status(404).json({ error: 'Produto não encontrado.' });
   
@@ -886,10 +936,10 @@ export function createProdutosRouter() {
       if (!p.length) return res.status(404).json({ error: 'Produto não encontrado.' });
       try {
         const [e]: any = await db.execute(
-          `SELECT id, sigla, descricao, fator, codigo_barras, preco, ativo FROM ${bd}.cad_produtos_embalagens WHERE produto_id = ? ORDER BY fator, sigla`,
+          `SELECT id, sigla, descricao, fator, codigo_barras, preco, peso_kg, altura_cm, largura_cm, comprimento_cm, ativo FROM ${bd}.cad_produtos_embalagens WHERE produto_id = ? ORDER BY fator, sigla`,
           [id],
         );
-        return res.json({ semTabela: false, produto: p[0], embalagens: e.map((x: any) => ({ id: x.id, sigla: x.sigla, descricao: x.descricao, fator: Number(x.fator), codigoBarras: x.codigo_barras, preco: x.preco === null ? null : Number(x.preco), ativo: Boolean(x.ativo) })) });
+        return res.json({ semTabela: false, produto: p[0], embalagens: e.map((x: any) => ({ id: x.id, sigla: x.sigla, descricao: x.descricao, fator: Number(x.fator), codigoBarras: x.codigo_barras, preco: x.preco === null ? null : Number(x.preco), peso_kg: num(x.peso_kg), altura_cm: num(x.altura_cm), largura_cm: num(x.largura_cm), comprimento_cm: num(x.comprimento_cm), ativo: Boolean(x.ativo) })) });
       } catch (e: any) {
         if (e.code === 'ER_NO_SUCH_TABLE') return res.json({ semTabela: true, produto: p[0], embalagens: [] });
         throw e;
@@ -970,8 +1020,8 @@ export function createProdutosRouter() {
         if (e.id && existentes.has(e.id)) {
           mantidos.add(e.id);
           await conn.execute(
-            `UPDATE ${bd}.cad_produtos_embalagens SET sigla = ?, descricao = ?, fator = ?, codigo_barras = ?, preco = ?, ativo = ?, atualizado_em = NOW() WHERE id = ? AND produto_id = ?`,
-            [e.sigla, e.descricao, e.fator, e.codigo, e.preco, e.ativo, e.id, id],
+            `UPDATE ${bd}.cad_produtos_embalagens SET sigla = ?, descricao = ?, fator = ?, codigo_barras = ?, preco = ?, peso_kg = ?, altura_cm = ?, largura_cm = ?, comprimento_cm = ?, ativo = ?, atualizado_em = NOW() WHERE id = ? AND produto_id = ?`,
+            [e.sigla, e.descricao, e.fator, e.codigo, e.preco, e.peso_kg, e.altura_cm, e.largura_cm, e.comprimento_cm, e.ativo, e.id, id],
           );
         }
       }
@@ -980,8 +1030,8 @@ export function createProdutosRouter() {
       for (const e of lista) {
         if (!(e.id && existentes.has(e.id))) {
           await conn.execute(
-            `INSERT INTO ${bd}.cad_produtos_embalagens (produto_id, sigla, descricao, fator, codigo_barras, preco, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-            [id, e.sigla, e.descricao, e.fator, e.codigo, e.preco, e.ativo],
+            `INSERT INTO ${bd}.cad_produtos_embalagens (produto_id, sigla, descricao, fator, codigo_barras, preco, peso_kg, altura_cm, largura_cm, comprimento_cm, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [id, e.sigla, e.descricao, e.fator, e.codigo, e.preco, e.peso_kg, e.altura_cm, e.largura_cm, e.comprimento_cm, e.ativo],
           );
         }
       }
@@ -1077,6 +1127,110 @@ export function createProdutosRouter() {
       return res.json({ success: true });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Dados do produto no portal B2B (tabelas b2b_produtos e b2b_descontos_volume, migration do erp-b2b). Sem linha
+   * em b2b_produtos = padrão da tabela (publicado, múltiplo 1). Banco sem as tabelas: { semTabela: true }.
+   */
+  router.get('/produtos/:id/b2b', async (req: Request, res: Response) => {
+    try {
+      const s = await sessao(req, res);
+      if (!s) return res.status(401).json({ error: 'Não autorizado' });
+      const db = await getDb();
+      const bd = s.dbConfig?.database;
+      const [p]: any = await db.execute(
+        `SELECT p.id, p.sku, p.nome, p.preco_venda, u.sigla AS unidade_sigla
+           FROM ${bd}.cad_produtos p LEFT JOIN ${bd}.cad_produtos_unidades_medida u ON u.id = p.unidade_id WHERE p.id = ? AND p.grupo_id = ?`,
+        [req.params.id, grupoDa(s)],
+      );
+      if (!p.length) return NAO_ACHOU(res);
+      try {
+        const [b]: any = await db.execute(
+          `SELECT publicado, aplicacao, multiplo_venda, preco_promocao, estoque_minimo FROM ${bd}.b2b_produtos WHERE produto_id = ?`,
+          [req.params.id],
+        );
+        const [d]: any = await db.execute(
+          `SELECT qtd_minima, desconto_percentual FROM ${bd}.b2b_descontos_volume WHERE produto_id = ? ORDER BY qtd_minima`,
+          [req.params.id],
+        );
+        const x = b[0];
+        return res.json({
+          semTabela: false,
+          produto: p[0],
+          b2b: {
+            publicado: x ? Boolean(x.publicado) : true,
+            aplicacao: x?.aplicacao ?? '',
+            multiplo_venda: x ? Number(x.multiplo_venda) : 1,
+            preco_promocao: x?.preco_promocao == null ? null : Number(x.preco_promocao),
+            estoque_minimo: x ? Number(x.estoque_minimo) : 0,
+          },
+          descontos: d.map((r: any) => ({ qtd_minima: Number(r.qtd_minima), desconto_percentual: Number(r.desconto_percentual) })),
+        });
+      } catch (e: any) {
+        if (e.code === 'ER_NO_SUCH_TABLE') return res.json({ semTabela: true, produto: p[0], b2b: null, descontos: [] });
+        throw e;
+      }
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.put('/produtos/:id/b2b', async (req: Request, res: Response) => {
+    let conn: any = null;
+    try {
+      const s = await sessao(req, res);
+      if (!s) return res.status(401).json({ error: 'Não autorizado' });
+      const b = req.body || {};
+      const aplicacao = String(b.aplicacao ?? '').trim();
+      if (aplicacao.length > 150) throw new Invalido('Aplicação: no máximo 150 caracteres.');
+      const multiplo = Number(b.multiplo_venda);
+      if (!Number.isInteger(multiplo) || multiplo < 1) throw new Invalido('O múltiplo de venda deve ser um número inteiro maior que zero.');
+      // Promoção zero ou em branco = sem promoção
+      const promocao = num(b.preco_promocao) || null;
+      if (promocao !== null && (!Number.isFinite(promocao) || promocao < 0)) throw new Invalido('Preço promocional inválido.');
+      const minimo = num(b.estoque_minimo) ?? 0;
+      if (!Number.isFinite(minimo) || minimo < 0) throw new Invalido('Estoque mínimo inválido.');
+      // Descontos por volume: o portal aplica o maior desconto cuja quantidade mínima o item atingiu
+      const lista = Array.isArray(b.descontos) ? b.descontos : [];
+      if (lista.length > 20) throw new Invalido('No máximo 20 faixas de desconto por produto.');
+      const qtds = new Set<number>();
+      const descontos = lista.map((r: any) => {
+        const qtd = Number(r.qtd_minima);
+        if (!Number.isInteger(qtd) || qtd < 1) throw new Invalido('Quantidade mínima do desconto: número inteiro maior que zero.');
+        if (qtds.has(qtd)) throw new Invalido(`A quantidade mínima ${qtd} está repetida.`);
+        qtds.add(qtd);
+        const pct = Math.round(Number(r.desconto_percentual) * 100) / 100;
+        if (!(pct > 0 && pct < 100)) throw new Invalido(`Desconto a partir de ${qtd}: informe um percentual maior que zero e menor que 100.`);
+        return [qtd, pct];
+      });
+      const db = await getDb();
+      const bd = s.dbConfig?.database;
+      const [p]: any = await db.execute(`SELECT id FROM ${bd}.cad_produtos WHERE id = ? AND grupo_id = ?`, [req.params.id, grupoDa(s)]);
+      if (!p.length) return NAO_ACHOU(res);
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+      await conn.execute(
+        `INSERT INTO ${bd}.b2b_produtos (produto_id, publicado, aplicacao, multiplo_venda, preco_promocao, estoque_minimo)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE publicado = VALUES(publicado), aplicacao = VALUES(aplicacao), multiplo_venda = VALUES(multiplo_venda),
+                                 preco_promocao = VALUES(preco_promocao), estoque_minimo = VALUES(estoque_minimo)`,
+        [req.params.id, b.publicado === false || b.publicado === 0 ? 0 : 1, aplicacao || null, multiplo, promocao, minimo],
+      );
+      // As faixas são só do produto (nada aponta para elas): regrava a lista inteira
+      await conn.execute(`DELETE FROM ${bd}.b2b_descontos_volume WHERE produto_id = ?`, [req.params.id]);
+      for (const [qtd, pct] of descontos)
+        await conn.execute(`INSERT INTO ${bd}.b2b_descontos_volume (produto_id, qtd_minima, desconto_percentual) VALUES (?, ?, ?)`, [req.params.id, qtd, pct]);
+      await conn.commit();
+      return res.json({ success: true });
+    } catch (e: any) {
+      if (conn) await conn.rollback().catch(() => {});
+      if (e instanceof Invalido) return res.status(400).json({ error: e.message });
+      if (e.code === 'ER_NO_SUCH_TABLE') return res.status(409).json({ error: 'As tabelas do B2B não existem neste banco (migration do erp-b2b).' });
+      return res.status(500).json({ error: e.message });
+    } finally {
+      if (conn) conn.release();
     }
   });
 

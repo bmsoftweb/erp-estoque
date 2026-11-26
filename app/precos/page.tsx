@@ -17,7 +17,7 @@ import { formatNumber } from '@/lib/utils';
 /** Listas de preço: cadastro (critérios, faixas, itens) e simulador. Regra de escolha em lib/precos.ts. */
 
 const UFS: Opcao[] = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ').map((u) => ({ valor: u, rotulo: u }));
-const CANAIS: Opcao[] = ['Balcão', 'Representante', 'Telefone', 'E-commerce'].map((c) => ({ valor: c, rotulo: c }));
+const CANAIS: Opcao[] = ['Balcão', 'Representante', 'Telefone', 'E-commerce', 'B2B'].map((c) => ({ valor: c, rotulo: c }));
 const ROTULO_CRITERIO: Record<string, string> = { tipo_cliente: 'Tipo', cidade: 'Cidade', uf: 'UF', regiao: 'Região', vendedor: 'Vendedor', cliente: 'Cliente', canal: 'Canal', clube: 'Clube' };
 
 interface ItemForm {

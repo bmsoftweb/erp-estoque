@@ -19,11 +19,28 @@ interface Linha {
   fator: string;
   codigoBarras: string;
   preco: string;
+  // Embalagem fechada (cubagem do erp-wms): vazio = não informado; sem peso, o WMS usa fator × peso do produto
+  peso_kg: string;
+  altura_cm: string;
+  largura_cm: string;
+  comprimento_cm: string;
   ativo: boolean;
 }
 
+const MEDIDAS = [
+  ['peso_kg', 'Peso da embalagem (kg)', 3],
+  ['altura_cm', 'Altura (cm)', 2],
+  ['largura_cm', 'Largura (cm)', 2],
+  ['comprimento_cm', 'Comprimento (cm)', 2],
+] as const;
+
 const moeda = (v: number) => 'R$ ' + formatNumber(v, 2);
 const s = (v: any) => (v === null || v === undefined ? '' : String(v));
+const daApi = (e: any): Linha => ({
+  id: e.id, sigla: e.sigla, descricao: e.descricao, fator: s(e.fator), codigoBarras: s(e.codigoBarras), preco: s(e.preco),
+  peso_kg: s(e.peso_kg), altura_cm: s(e.altura_cm), largura_cm: s(e.largura_cm), comprimento_cm: s(e.comprimento_cm), ativo: e.ativo,
+});
+const ouNulo = (v: string) => (v === '' ? null : Number(v));
 
 export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => void }> = ({ produtoId, onVoltar }) => {
   const [carregando, setCarregando] = useState(true);
@@ -43,7 +60,7 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
         if (!vivo) return;
         setProduto(d.produto);
         setSemTabela(d.semTabela);
-        setLinhas(d.embalagens.map((e: any): Linha => ({ id: e.id, sigla: e.sigla, descricao: e.descricao, fator: s(e.fator), codigoBarras: s(e.codigoBarras), preco: s(e.preco), ativo: e.ativo })));
+        setLinhas(d.embalagens.map(daApi));
       })
       .catch((e) => vivo && setErro(e.message))
       .finally(() => vivo && setCarregando(false));
@@ -65,7 +82,7 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
     setErro(null);
     try {
       const corpo = {
-        embalagens: linhas.map((l) => ({ id: l.id, sigla: l.sigla, descricao: l.descricao, fator: Number(l.fator), codigoBarras: l.codigoBarras, preco: l.preco === '' ? null : Number(l.preco), ativo: l.ativo })),
+        embalagens: linhas.map((l) => ({ id: l.id, sigla: l.sigla, descricao: l.descricao, fator: Number(l.fator), codigoBarras: l.codigoBarras, preco: ouNulo(l.preco), peso_kg: ouNulo(l.peso_kg), altura_cm: ouNulo(l.altura_cm), largura_cm: ouNulo(l.largura_cm), comprimento_cm: ouNulo(l.comprimento_cm), ativo: l.ativo })),
       };
       const r = await fetch(`/api/produtos/${produtoId}/embalagens`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
       const d = await r.json().catch(() => ({}));
@@ -74,7 +91,7 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
       // Recarrega para pegar os ids das novas
       const r2 = await fetch(`/api/produtos/${produtoId}/embalagens`);
       const d2 = await r2.json();
-      if (r2.ok) setLinhas(d2.embalagens.map((e: any): Linha => ({ id: e.id, sigla: e.sigla, descricao: e.descricao, fator: s(e.fator), codigoBarras: s(e.codigoBarras), preco: s(e.preco), ativo: e.ativo })));
+      if (r2.ok) setLinhas(d2.embalagens.map(daApi));
     } catch (e: any) {
       setErro(e.message);
     } finally {
@@ -123,7 +140,7 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
         titulo="Embalagens"
         direita={
           !semTabela && (
-            <button type="button" onClick={() => setLinhas((l) => [...l, { sigla: 'CX', descricao: '', fator: '', codigoBarras: '', preco: '', ativo: true }])} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer">
+            <button type="button" onClick={() => setLinhas((l) => [...l, { sigla: 'CX', descricao: '', fator: '', codigoBarras: '', preco: '', peso_kg: '', altura_cm: '', largura_cm: '', comprimento_cm: '', ativo: true }])} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer">
               <Plus className="w-3.5 h-3.5" />
               <span>Adicionar</span>
             </button>
@@ -138,6 +155,8 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
               const fator = Number(l.fator);
               const gtin = l.codigoBarras.replace(/\D/g, '');
               const padrao = fator > 0 ? base * fator : 0;
+              // Volume em m³ = altura × largura × comprimento (cm) / 1.000.000
+              const volume = (Number(l.altura_cm) * Number(l.largura_cm) * Number(l.comprimento_cm)) / 1_000_000;
               return (
                 <div key={l.id ?? 'n' + i} className={'rounded-lg border p-3 ' + (l.ativo ? 'border-stone-200 dark:border-stone-800' : 'border-stone-200 dark:border-stone-800 opacity-60')}>
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
@@ -171,6 +190,20 @@ export const EmbalagensProduto: React.FC<{ produtoId: number; onVoltar: () => vo
                       <button type="button" title="Remover" onClick={() => setLinhas((x) => x.filter((_, k) => k !== i))} className="p-2 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer">
                         <Trash2 className="w-4 h-4" />
                       </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-12 gap-3 items-start">
+                    {MEDIDAS.map(([c, rot, casas]) => (
+                      <div key={c} className="sm:col-span-2">
+                        <label className={rotulo}>{rot}</label>
+                        <div className="mt-1">
+                          <NumberField value={l[c]} onChange={(v) => set(i, { [c]: v })} scale={casas} className={INPUT_CLASS} />
+                        </div>
+                      </div>
+                    ))}
+                    <div className="col-span-2 sm:col-span-4 sm:pt-6 text-[11px] text-stone-500 dark:text-stone-400">
+                      {volume > 0 ? <>Volume: {formatNumber(volume, 4)} m³</> : 'Volume: informe altura, largura e comprimento.'}
+                      {l.peso_kg === '' && <> • Sem peso: fator × peso do produto.</>}
                     </div>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-stone-500 dark:text-stone-400">

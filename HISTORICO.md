@@ -2,6 +2,13 @@
 
 Mais recente primeiro. PATCH a cada envio ao GitHub; MAJOR/MINOR só quando pedido.
 
+## 0.1.11 — 2026-11-26
+
+- Produtos: altura, largura e comprimento (cm) no cadastro, para a cubagem do erp-wms (script `extras/2026-11-26_produtos_dimensoes.sql`); o peso (kg), que aparecia no formulário mas não era gravado, agora grava. Vazio = não informado.
+- Embalagens: peso e medidas da embalagem fechada, com o volume em m³; sem peso, o WMS usa fator × peso do produto.
+- Produtos: ação "B2B" com os dados do produto no portal B2B (publicado, aplicação, múltiplo de venda, promoção, estoque mínimo e descontos por volume); canal "B2B" nas listas de preço.
+- Listas: modo botões na coluna Ações (ícone ao lado de "Ações"), gravado no "Salvar Configuração"; ação que não vale na linha aparece desativada em cinza em vez de sumir.
+
 ## 0.1.10 — 2026-11-23
 
 - Marca BM na tela: mensagens e textos citam o "BM-Master" (no lugar de "ERP-Master"). Vale para os erros do Serper e do certificado.

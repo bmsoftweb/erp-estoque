@@ -5,9 +5,10 @@ import { ListaCrm } from '@/components/ListaCrm';
 import { DadosFiscaisProduto } from '@/components/DadosFiscaisProduto';
 import { EmbalagensProduto } from '@/components/EmbalagensProduto';
 import { EstoqueProduto } from '@/components/EstoqueProduto';
+import { ProdutoB2B } from '@/components/ProdutoB2B';
 import { ImagensProduto } from '@/components/ImagensProduto';
 import { ProdutosRelacionados } from '@/components/ProdutosRelacionados';
-import { Receipt, Boxes, Replace, ShoppingBasket, ArrowLeftRight, Warehouse } from 'lucide-react';
+import { Receipt, Boxes, Replace, ShoppingBasket, ArrowLeftRight, Warehouse, Store } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AvisoErro } from '@/components/AvisoErro';
 import { ModalPesquisa } from '@/components/ModalPesquisa';
@@ -51,6 +52,9 @@ interface Produto {
   preco_custo: number;
   preco_venda: number;
   peso_kg: number | null;
+  altura_cm?: number | null;
+  largura_cm?: number | null;
+  comprimento_cm?: number | null;
   ativo: number;
   controla_lote?: number;
   codigo_barras: string | null;
@@ -99,7 +103,7 @@ export default function ProdutosPage() {
   const [isSavingGrid, setIsSavingGrid] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'grid' | 'edit' | 'variantes' | 'filter' | 'composicao' | 'fiscal' | 'embalagens' | 'estoque' | 'imagens' | 'similares' | 'sugestoes'>('grid');
+  const [activeTab, setActiveTab] = useState<'grid' | 'edit' | 'variantes' | 'filter' | 'composicao' | 'fiscal' | 'embalagens' | 'estoque' | 'imagens' | 'similares' | 'sugestoes' | 'b2b'>('grid');
   const [editingProduto, setEditingProduto] = useState<Produto | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; id: number | null; type: 'produto' | 'variante' | 'composicao' }>({ isOpen: false, id: null, type: 'produto' });
   const [isDeleting, setIsDeleting] = useState(false);
@@ -271,6 +275,9 @@ export default function ProdutosPage() {
     preco_custo: number;
     preco_venda: number;
     peso_kg: number;
+    altura_cm: number;
+    largura_cm: number;
+    comprimento_cm: number;
     ativo: number;
     controla_lote: number;
     atributos_selecionados: number[];
@@ -286,6 +293,9 @@ export default function ProdutosPage() {
     preco_custo: 0,
     preco_venda: 0,
     peso_kg: 0,
+    altura_cm: 0,
+    largura_cm: 0,
+    comprimento_cm: 0,
     ativo: 1,
     controla_lote: 0,
     atributos_selecionados: [],
@@ -726,6 +736,9 @@ export default function ProdutosPage() {
       marca_id: 'Marca',
       unidade_id: 'Unidade',
       peso_kg: 'Peso (kg)',
+      altura_cm: 'Altura (cm)',
+      largura_cm: 'Largura (cm)',
+      comprimento_cm: 'Comprimento (cm)',
       codigo_barras: 'Cód. Barras',
       descricao: 'Descrição'
     };
@@ -1126,7 +1139,10 @@ export default function ProdutosPage() {
         unidade_id: produto.unidade_id,
         preco_custo: produto.preco_custo,
         preco_venda: produto.preco_venda,
-        peso_kg: produto.peso_kg || 0,
+        peso_kg: Number(produto.peso_kg) || 0,
+        altura_cm: Number(produto.altura_cm) || 0,
+        largura_cm: Number(produto.largura_cm) || 0,
+        comprimento_cm: Number(produto.comprimento_cm) || 0,
         ativo: produto.ativo,
         controla_lote: Number(produto.controla_lote) ? 1 : 0,
         codigo_barras: (produto as any).codigo_barras || '',
@@ -1150,6 +1166,9 @@ export default function ProdutosPage() {
         preco_custo: 0,
         preco_venda: 0,
         peso_kg: 0,
+        altura_cm: 0,
+        largura_cm: 0,
+        comprimento_cm: 0,
         ativo: 1,
         controla_lote: 0,
         atributos_selecionados: []
@@ -1528,7 +1547,7 @@ export default function ProdutosPage() {
           abas={
             activeTab === 'grid'
               ? []
-              : [{ key: activeTab, titulo: activeTab === 'edit' ? (editingProduto ? 'Editar Produto' : 'Novo Produto') : activeTab === 'variantes' ? 'Variantes' : activeTab === 'composicao' ? 'Composição' : activeTab === 'fiscal' ? 'Dados fiscais' : activeTab === 'embalagens' ? 'Embalagens' : activeTab === 'estoque' ? 'Estoque' :activeTab === 'imagens' ? 'Imagens' : activeTab === 'similares' ? 'Similares' : activeTab === 'sugestoes' ? 'Sugestões' : 'Filtrar', novo: activeTab === 'edit' && !editingProduto }]
+              : [{ key: activeTab, titulo: activeTab === 'edit' ? (editingProduto ? 'Editar Produto' : 'Novo Produto') : activeTab === 'variantes' ? 'Variantes' : activeTab === 'composicao' ? 'Composição' : activeTab === 'fiscal' ? 'Dados fiscais' : activeTab === 'embalagens' ? 'Embalagens' : activeTab === 'estoque' ? 'Estoque' :activeTab === 'imagens' ? 'Imagens' : activeTab === 'similares' ? 'Similares' : activeTab === 'sugestoes' ? 'Sugestões' : activeTab === 'b2b' ? 'B2B' : 'Filtrar', novo: activeTab === 'edit' && !editingProduto }]
           }
           ativa={activeTab === 'grid' ? null : activeTab}
           onAtivar={(k) => k === null && closeTab()}
@@ -1642,7 +1661,7 @@ export default function ProdutosPage() {
                     ) : r.tipo_produto === 'composto' ? (
                       <BotaoAcao icone={Package} titulo="Composição" descricao="Abre a composição do produto" onClick={() => openComposicao(r)} />
                     ) : (
-                      <Vazio />
+                      <Vazio icone={Layers} titulo="Variantes" />
                     )}
                     <BotaoAcao icone={Boxes} titulo="Embalagens" descricao="Fardo, caixa e outras embalagens do produto" onClick={() => openEmbalagens(r)} />
                     <BotaoAcao icone={ImageIcon} titulo="Imagens" descricao="Fotos do produto (uma é a principal)" onClick={() => openImagens(r)} />
@@ -1650,6 +1669,7 @@ export default function ProdutosPage() {
                     <BotaoAcao icone={ShoppingBasket} titulo="Sugestões" descricao="Produtos a oferecer junto com este na venda" onClick={() => openRelacionados(r, 'sugestoes')} />
                     <BotaoAcao icone={Receipt} titulo="Dados fiscais" descricao="NCM, CEST, grupo tributário e serviço (NF-e e NFS-e)" onClick={() => openFiscal(r)} />
                     <BotaoAcao icone={Warehouse} titulo="Estoque" descricao="Quantidade do produto em cada localização da filial" onClick={() => { setSelectedProduto(r); setActiveTab('estoque'); }} />
+                    <BotaoAcao icone={Store} titulo="B2B" descricao="Publicação no portal B2B, aplicação, múltiplo de venda, promoção, estoque mínimo e descontos por volume" onClick={() => { setSelectedProduto(r); setActiveTab('b2b'); }} />
                     <BotaoAcao icone={ArrowLeftRight} titulo="Movimento" descricao="Entradas, saídas e transferências deste produto" onClick={() => router.push(`/movimento?produto_id=${r.id}`)} />
                     <SeparadorAcoes />
                     <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
@@ -1719,6 +1739,8 @@ export default function ProdutosPage() {
             <ProdutosRelacionados key={activeTab} tipo={activeTab} produtoId={selectedProduto.id} produtos={produtos} onVoltar={closeTab} />
           ) : activeTab === 'fiscal' && selectedProduto ? (
             <DadosFiscaisProduto produtoId={selectedProduto.id} onVoltar={closeTab} />
+          ) : activeTab === 'b2b' && selectedProduto ? (
+            <ProdutoB2B produtoId={selectedProduto.id} onVoltar={closeTab} />
           ) : activeTab === 'composicao' ? (
             <TelaCheia larga rodape={'Produto #' + selectedProduto?.id + ' • Composição'} onVoltar={closeTab}>
               <ResumoRegistro titulo="Composição do produto" nome={selectedProduto?.nome} sku={selectedProduto?.sku} id={selectedProduto?.id} />
@@ -1963,6 +1985,10 @@ export default function ProdutosPage() {
                       { label: 'Custo', key: 'preco_custo', type: 'currency' },
                       { label: 'Venda', key: 'preco_venda', type: 'currency' },
                       { label: 'Peso (kg)', key: 'peso_kg', type: 'decimal' },
+                      // Medidas de 1 unidade de estoque (cubagem do erp-wms); vazio = não informado
+                      { label: 'Altura (cm)', key: 'altura_cm', type: 'decimal', casas: 2 },
+                      { label: 'Largura (cm)', key: 'largura_cm', type: 'decimal', casas: 2 },
+                      { label: 'Comprimento (cm)', key: 'comprimento_cm', type: 'decimal', casas: 2 },
                       // Sem controle, a entrada de nota (erp-compras) põe tudo no lote "0"; com controle, exige o lote da nota
                       { label: 'Controla lote', key: 'controla_lote', type: 'toggle' }
                     ].map((field) => (
@@ -2071,13 +2097,13 @@ export default function ProdutosPage() {
                           ) : field.type === 'decimal' ? (
                             <input 
                               type="text" 
-                              value={formatNumber(formData[field.key as keyof typeof formData] as number, 3)} 
+                              value={formatNumber(formData[field.key as keyof typeof formData] as number, 'casas' in field ? field.casas : 3)} 
                               onFocus={(e) => e.target.select()}
-                              onChange={(e) => setFormData({...formData, [field.key]: parseBankingInput(e.target.value, 3)})}
+                              onChange={(e) => setFormData({...formData, [field.key]: parseBankingInput(e.target.value, 'casas' in field ? field.casas : 3)})}
                               className={`${INPUT_CLASS} font-mono text-left`} 
                             />
                           ) : (
-                            <input type={field.type} step="0.0001" value={(formData[field.key as keyof typeof formData] !== undefined ? formData[field.key as keyof typeof formData] : '') as any} onFocus={(e) => e.target.select()} onChange={(e) => setFormData({...formData, [field.key]: field.type === 'number' ? parseFloat(e.target.value) : e.target.value})} className={INPUT_CLASS} />
+                            <input type={field.type} step="0.0001" {...(field.key === 'sku' && { placeholder: 'Automático', title: 'Em branco, o sistema gera SKU-000123 (123 = código do produto)' })} value={(formData[field.key as keyof typeof formData] !== undefined ? formData[field.key as keyof typeof formData] : '') as any} onFocus={(e) => e.target.select()} onChange={(e) => setFormData({...formData, [field.key]: field.type === 'number' ? parseFloat(e.target.value) : e.target.value})} className={INPUT_CLASS} />
                           )}
                         </Campo>
               ))}

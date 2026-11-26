@@ -1558,7 +1558,7 @@ export default function MovimentoPage() {
                     ) : r.tipo_produto === 'composto' ? (
                       <BotaoAcao icone={Package} titulo="Composição" descricao="Abre a composição do produto" onClick={() => openComposicao(r)} />
                     ) : (
-                      <Vazio />
+                      <Vazio icone={Layers} titulo="Variantes" />
                     )}
                     <SeparadorAcoes />
                     <BotaoAcao icone={Pencil} titulo="Editar" descricao="Abre o registro para edição" onClick={() => openForm(r)} />
